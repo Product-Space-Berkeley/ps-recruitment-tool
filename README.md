@@ -6,7 +6,7 @@ Built with Next.js, React, TypeScript, NextAuth (Google sign-in), and MongoDB/Mo
 
 ## Quick start for a new maintainer
 
-1. Get repository access and the environment values from the current maintainer through the club's password manager or another secure channel.
+1. Get repository access and the environment values from the current maintainer.
 2. Install Node.js 20.19 or later (Node.js 22 is suitable).
 3. Clone the repository and install dependencies:
 
