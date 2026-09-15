@@ -935,7 +935,7 @@ export default function AdminPage() {
                   onClick={() => selectCycle(cycle)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors ${
                     selectedCycle?.id === cycle.id
-                      ? 'bg-[var(--bg-active)] border-[#FF6B35]/40'
+                      ? 'bg-[var(--bg-active)] border-[var(--ps-accent)]/40'
                       : 'bg-[var(--bg-raised)] border-[var(--border)] hover:bg-[var(--bg-active)]'
                   }`}
                 >
@@ -957,14 +957,14 @@ export default function AdminPage() {
               value={newCycleName}
               onChange={e => setNewCycleName(e.target.value)}
               placeholder="e.g. FA2026"
-              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
               onKeyDown={e => e.key === 'Enter' && createCycle()}
             />
             {cycleError && <p className="text-red-400 text-xs">{cycleError}</p>}
             <button
               onClick={createCycle}
               disabled={cycleLoading}
-              className="w-full plex-gradient disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
+              className="w-full ps-gradient disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
             >
               {cycleLoading ? 'Creating...' : 'Create Cycle'}
             </button>
@@ -991,7 +991,7 @@ export default function AdminPage() {
                     onClick={exportApplications}
                     disabled={exportingCsv}
                     title="Export applicant data to CSV"
-                    className="text-sm px-4 py-2 rounded-lg border font-medium bg-[var(--bg-raised)] text-[var(--text-muted)] border-[var(--border)] hover:text-[#FF6B35] hover:border-[#FF6B35]/50 transition-colors cursor-pointer disabled:opacity-50"
+                    className="text-sm px-4 py-2 rounded-lg border font-medium bg-[var(--bg-raised)] text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--ps-accent)] hover:border-[var(--ps-accent)]/50 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {exportingCsv ? 'Exporting…' : 'Export applicant data to CSV'}
                   </button>
@@ -1034,12 +1034,12 @@ export default function AdminPage() {
                           type="datetime-local"
                           value={deadlineInput}
                           onChange={e => setDeadlineInput(e.target.value)}
-                          className="bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B35]"
+                          className="bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--ps-accent)]"
                         />
                         <button
                           onClick={saveDeadline}
                           disabled={deadlineSaving}
-                          className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer"
+                          className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer"
                         >
                           {deadlineSaving ? 'Saving...' : 'Set Deadline'}
                         </button>
@@ -1057,7 +1057,7 @@ export default function AdminPage() {
                           <button
                             onClick={startGrading}
                             disabled={startGradingLoading}
-                            className="plex-gradient disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer"
+                            className="ps-gradient disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer"
                           >
                             {startGradingLoading ? 'Starting...' : '▶ Start Grading'}
                           </button>
@@ -1121,28 +1121,28 @@ export default function AdminPage() {
                       value={p.prompt}
                       onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, prompt: e.target.value } : x))}
                       placeholder="Question text..."
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                     />
                     <input
                       type="text"
                       value={p.description ?? ''}
                       onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
                       placeholder="Description / clarification (optional)..."
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                     />
                     <input
                       type="text"
                       value={p.criterion1 ?? ''}
                       onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, criterion1: e.target.value } : x))}
                       placeholder="Grading criterion 1 (e.g. To what degree does the applicant demonstrate passion?)"
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                     />
                     <input
                       type="text"
                       value={p.criterion2 ?? ''}
                       onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, criterion2: e.target.value } : x))}
                       placeholder="Grading criterion 2 (e.g. To what extent does the applicant exhibit knowledge?)"
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                     />
                   </div>
                 ))}
@@ -1151,7 +1151,7 @@ export default function AdminPage() {
                 <button
                   onClick={savePrompts}
                   disabled={promptSaving}
-                  className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                  className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
                 >
                   {promptSaving ? 'Saving...' : 'Save Prompts'}
                 </button>
@@ -1165,7 +1165,7 @@ export default function AdminPage() {
                 {rounds.map(round => (
                   <div key={round.id} className={`flex items-center gap-1 rounded-lg border transition-colors ${
                     selectedRound?.id === round.id
-                      ? 'bg-[var(--bg-active)] border-[#FF6B35]/40'
+                      ? 'bg-[var(--bg-active)] border-[var(--ps-accent)]/40'
                       : 'bg-[var(--bg-raised)] border-[var(--border)]'
                   }`}>
                     <button
@@ -1184,7 +1184,7 @@ export default function AdminPage() {
                     </button>
                     <button
                       onClick={() => renameRound(round)}
-                      className="px-2 py-3 text-[var(--text-muted)] hover:text-[#FF6B35] transition-colors text-sm"
+                      className="px-2 py-3 text-[var(--text-muted)] hover:text-[var(--ps-accent)] transition-colors text-sm"
                       title="Rename round"
                     >
                       ✎
@@ -1241,7 +1241,7 @@ export default function AdminPage() {
                       <button
                         key={s.id}
                         onClick={() => router.push(`/session/${s.id}`)}
-                        className="text-xs px-3 py-1.5 rounded-lg border font-medium bg-[var(--bg-raised)] border-[var(--border)] text-[var(--text-primary)] hover:border-[#FF6B35]/40 transition-colors inline-flex items-center gap-2"
+                        className="text-xs px-3 py-1.5 rounded-lg border font-medium bg-[var(--bg-raised)] border-[var(--border)] text-[var(--text-primary)] hover:border-[var(--ps-accent)]/40 transition-colors inline-flex items-center gap-2"
                       >
                         <span className={`inline-block w-1.5 h-1.5 rounded-full ${dot}`} />
                         Go to {label} Deliberation →
@@ -1272,7 +1272,7 @@ export default function AdminPage() {
                         <button
                           onClick={assignGraders}
                           disabled={assignLoading || selectedRound.status !== 'pending'}
-                          className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
+                          className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
                         >
                           {assignLoading ? 'Assigning...' : 'Assign Graders'}
                         </button>
@@ -1297,7 +1297,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-2 bg-[var(--border)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-[#FF6B35] rounded-full transition-all"
+                              className="h-full bg-[var(--ps-accent)] rounded-full transition-all"
                               style={{ width: `${gradingProgress.totalAssignments > 0 ? Math.round((gradingProgress.completedReviews / gradingProgress.totalAssignments) * 100) : 0}%` }}
                             />
                           </div>
@@ -1312,7 +1312,7 @@ export default function AdminPage() {
                                 <span className="text-[var(--text-muted)] w-48 truncate">{g.email}</span>
                                 <div className="flex-1 h-1 bg-[var(--border)] rounded-full overflow-hidden">
                                   <div
-                                    className={`h-full rounded-full ${g.completed === g.assigned ? 'bg-green-500' : 'bg-[#FF6B35]'}`}
+                                    className={`h-full rounded-full ${g.completed === g.assigned ? 'bg-green-500' : 'bg-[var(--ps-accent)]'}`}
                                     style={{ width: `${g.assigned > 0 ? Math.round((g.completed / g.assigned) * 100) : 0}%` }}
                                   />
                                 </div>
@@ -1343,7 +1343,7 @@ export default function AdminPage() {
                       <button
                         onClick={startDeliberation}
                         disabled={delibLoading}
-                        className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
+                        className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
                       >
                         {delibLoading ? 'Creating session...' : 'Start Deliberation'}
                       </button>
@@ -1371,12 +1371,12 @@ export default function AdminPage() {
                           value={interviewFormUrl}
                           onChange={e => setInterviewFormUrl(e.target.value)}
                           placeholder="https://docs.google.com/forms/..."
-                          className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                          className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                         />
                         <button
                           onClick={saveInterviewFormUrl}
                           disabled={formUrlSaving}
-                          className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer shrink-0"
+                          className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer shrink-0"
                         >
                           {formUrlSaving ? 'Saving...' : 'Save'}
                         </button>
@@ -1433,13 +1433,13 @@ export default function AdminPage() {
                         }}
                         placeholder="Or paste CSV here..."
                         rows={4}
-                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35] resize-none"
+                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)] resize-none"
                       />
 
                       <button
                         onClick={buildInterviewPreview}
                         disabled={interviewImporting || !interviewCsvText.trim() || currentUser?.role !== 'admin'}
-                        className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+                        className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer disabled:cursor-not-allowed"
                       >
                         {interviewImporting ? 'Checking CSV...' : 'Preview Interview Import'}
                       </button>
@@ -1494,7 +1494,7 @@ export default function AdminPage() {
                                     <td className="px-3 py-1.5 text-[var(--text-muted)]">{i + 1}</td>
                                     <td className="px-3 py-1.5 text-[var(--text-primary)]">{candidate.applicant_name ?? candidate.source_name}</td>
                                     <td className="px-3 py-1.5 text-[var(--text-secondary)]">{candidate.interviewers.join(', ') || '—'}</td>
-                                    <td className="px-3 py-1.5 text-right font-mono text-[#FF6B35]">{candidate.overall_score ?? '—'}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-[var(--ps-accent)]">{candidate.overall_score ?? '—'}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1505,7 +1505,7 @@ export default function AdminPage() {
                             disabled={interviewImporting || interviewPreview.candidates.some(candidate =>
                               candidate.status === 'unresolved' && !interviewResolutions[candidate.source_name]
                             )}
-                            className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
+                            className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
                           >
                             {interviewImporting ? 'Creating session...' : 'Create Deliberation Session'}
                           </button>
@@ -1540,12 +1540,12 @@ export default function AdminPage() {
                             setCoffeeChatSourceMessage('')
                           }}
                           placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=0"
-                          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-[#FF6B35] focus:outline-none"
+                          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-[var(--ps-accent)] focus:outline-none"
                         />
                         <button
                           onClick={connectCoffeeChatSheet}
                           disabled={coffeeChatSourceLoading || !coffeeChatSheetUrl.trim()}
-                          className="plex-gradient rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          className="ps-gradient rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {coffeeChatSourceLoading ? 'Checking Sheet...' : coffeeChatSourceConnected ? 'Reconnect Sheet' : 'Connect Google Sheet'}
                         </button>
@@ -1601,12 +1601,12 @@ export default function AdminPage() {
                     }}
                     placeholder="Or paste coffee-chat CSV here..."
                     rows={4}
-                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35] resize-none"
+                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)] resize-none"
                   />
                   <button
                     onClick={previewCoffeeChats}
                     disabled={coffeeChatLoading || !coffeeChatCsvText.trim()}
-                    className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+                    className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer disabled:cursor-not-allowed"
                   >
                     {coffeeChatLoading ? 'Checking CSV...' : 'Preview Coffee Chats'}
                   </button>
@@ -1671,7 +1671,7 @@ export default function AdminPage() {
                           <button
                             onClick={importCoffeeChats}
                             disabled={coffeeChatLoading}
-                            className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+                            className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer disabled:cursor-not-allowed"
                           >
                             {coffeeChatLoading ? 'Importing...' : 'Replace Cycle Coffee Chats'}
                           </button>
@@ -1695,7 +1695,7 @@ export default function AdminPage() {
                     <button
                       onClick={startDeliberation}
                       disabled={delibLoading}
-                      className="plex-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
+                      className="ps-gradient disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg cursor-pointer"
                     >
                       {delibLoading ? 'Creating session...' : 'Start Deliberation'}
                     </button>

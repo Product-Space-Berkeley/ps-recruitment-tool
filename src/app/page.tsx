@@ -17,35 +17,35 @@ export default function Home() {
 
   if (status === 'loading') {
     return (
-      <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center">
+      <main className="ps-entry min-h-screen bg-[var(--bg-base)] flex items-center justify-center">
         <div className="text-[var(--text-muted)] text-sm">Loading...</div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center p-4">
+    <main className="ps-entry min-h-screen bg-[var(--bg-base)] flex items-center justify-center p-4">
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white border border-[var(--border)] shadow-[var(--shadow-soft)]">
-            <Image src="/PlexTechLogo.png" alt="PlexTech" width={48} height={48} className="object-contain" priority />
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-raised)] border border-[var(--border)] shadow-[var(--shadow-soft)]">
+            <Image src="/product-space-logo.png" alt="Product Space" width={40} height={52} className="object-contain" priority />
           </div>
-          <p className="plex-gradient-text text-sm font-bold uppercase tracking-[0.22em] mb-3">PlexTech Berkeley</p>
+          <p className="ps-gradient-text text-sm font-bold uppercase tracking-[0.22em] mb-3">Product Space @ Berkeley</p>
           <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)]">Recruitment Hub</h1>
           <p className="text-[var(--text-muted)] mt-3 text-sm">Applications, grading, and deliberations in one place.</p>
         </div>
 
         <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-[28px] p-8 space-y-5">
           <p className="text-sm text-[var(--text-muted)] text-center">
-            Sign in with your club Google account to continue.
+            Welcome to Product Space. Sign in to review applications and shape our next cohort.
           </p>
 
           <button
             onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-            className="w-full flex items-center justify-center gap-3 plex-gradient text-white font-bold py-3 rounded-xl transition-all hover:-translate-y-0.5"
+            className="w-full flex items-center justify-center gap-3 ps-gradient text-white font-bold py-3 rounded-xl transition-all hover:-translate-y-0.5"
           >
             <GoogleIcon />
             Sign in with Google

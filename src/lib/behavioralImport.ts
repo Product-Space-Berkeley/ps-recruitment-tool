@@ -5,7 +5,7 @@ export const BEHAVIORAL_HEADERS = ['Timestamp', 'Email Address', 'Score', 'Inter
 export const BEHAVIORAL_CRITERIA = [
   [6, 'Question 1'], [8, 'Question 2'], [10, 'Question 3a'], [12, 'Question 3b'],
   [14, 'Question 4a'], [16, 'Question 4b'], [18, 'Question 4c'], [20, 'Question 4d'],
-  [22, 'Question 5a'], [24, 'Question 5b'], [25, 'Passion for PlexTech'],
+  [22, 'Question 5a'], [24, 'Question 5b'], [25, 'Passion for Product Space'],
   [26, 'Resiliency & Coachability'], [27, 'Communication & Teamwork'], [28, 'Overall Fit'],
 ] as const
 export const normalizeBehavioralName = (s: string) => s.normalize('NFKC').toLowerCase().trim().replace(/\s+/g, ' ')

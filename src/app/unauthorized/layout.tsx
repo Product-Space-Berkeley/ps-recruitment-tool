@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Unauthorized | PlexTech - Berkeley',
+  title: 'Unauthorized | Product Space @ Berkeley',
 }
 
 export default function UnauthorizedLayout({ children }: { children: React.ReactNode }) {

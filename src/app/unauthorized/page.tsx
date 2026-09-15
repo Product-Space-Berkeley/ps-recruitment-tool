@@ -12,14 +12,14 @@ export default function Unauthorized() {
         <ThemeToggle />
       </div>
       <div className="text-center max-w-sm">
-        <p className="plex-gradient-text text-sm font-bold uppercase tracking-widest mb-6">PlexTech Berkeley</p>
+        <p className="ps-gradient-text text-sm font-bold uppercase tracking-widest mb-6">Product Space @ Berkeley</p>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Access Denied</h1>
         <p className="text-[var(--text-muted)] mb-6">
-          Applicants should use a verified Google account. Internal tools require an email authorized by a PlexTech admin.
+          Applicants should use a verified Google account. Internal tools require an email authorized by a Product Space admin.
         </p>
         <button
           onClick={() => router.push('/')}
-          className="plex-gradient text-white font-medium px-6 py-2 rounded-lg"
+          className="ps-gradient text-white font-medium px-6 py-2 rounded-lg"
         >
           Back to Login
         </button>

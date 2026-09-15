@@ -326,7 +326,7 @@ export default function GradingConsolePage() {
             <select
               value={selectedCycleId}
               onChange={e => void selectCycle(e.target.value)}
-              className="w-fit bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg pl-3 pr-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B35]"
+              className="w-fit bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg pl-3 pr-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--ps-accent)]"
             >
               {cycles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -336,7 +336,7 @@ export default function GradingConsolePage() {
             <select
               value={selectedRoundId}
               onChange={e => selectRound(e.target.value)}
-              className="w-fit bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg pl-3 pr-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B35]"
+              className="w-fit bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg pl-3 pr-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--ps-accent)]"
               disabled={rounds.length === 0}
             >
               {rounds.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -388,7 +388,7 @@ export default function GradingConsolePage() {
                   aria-valuemin={0}
                   aria-valuemax={applicants.length}
                   aria-valuenow={fullyGradedApplications}
-                  className="h-full rounded-full bg-gradient-to-r from-[#FF6B35] to-[#C026D3] transition-all"
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--ps-accent)] to-[#C026D3] transition-all"
                   style={{ width: `${overallProgress}%` }}
                 />
               </div>
@@ -470,7 +470,7 @@ export default function GradingConsolePage() {
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
                                 <div
-                                  className={`h-full rounded-full transition-all ${done ? 'bg-green-500' : 'bg-[#FF6B35]'}`}
+                                  className={`h-full rounded-full transition-all ${done ? 'bg-green-500' : 'bg-[var(--ps-accent)]'}`}
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
@@ -485,7 +485,7 @@ export default function GradingConsolePage() {
                               title={g.transferable_count === 0
                                 ? 'No eligible pending assignments can be transferred.'
                                 : `${g.transferable_count} pending assignments are eligible for transfer.`}
-                              className="whitespace-nowrap rounded-lg border border-[#FF6B35]/40 bg-[#FF6B35]/10 px-3 py-1.5 text-xs font-medium text-[#FF6B35] transition-colors hover:bg-[#FF6B35]/20 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="whitespace-nowrap rounded-lg border border-[var(--ps-accent)]/40 bg-[var(--ps-accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--ps-accent)] transition-colors hover:bg-[var(--ps-accent)]/20 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               Assign more
                             </button>
@@ -583,7 +583,7 @@ export default function GradingConsolePage() {
                             </td>
                             <td className="px-5 py-3 text-right font-mono font-semibold">
                               {hasScore ? (
-                                <span className="text-[#FF6B35]">{a.total.toFixed(2)}</span>
+                                <span className="text-[var(--ps-accent)]">{a.total.toFixed(2)}</span>
                               ) : (
                                 <span className="text-[var(--text-muted)]">—</span>
                               )}
@@ -689,7 +689,7 @@ export default function GradingConsolePage() {
                       setReassignCount(Number(event.target.value))
                       setReassignError('')
                     }}
-                    className="mt-1 block w-28 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2 text-[var(--text-primary)] focus:border-[#FF6B35] focus:outline-none"
+                    className="mt-1 block w-28 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2 text-[var(--text-primary)] focus:border-[var(--ps-accent)] focus:outline-none"
                   />
                 </label>
                 <p className="text-xs text-[var(--text-muted)]">
@@ -715,7 +715,7 @@ export default function GradingConsolePage() {
                       || reassignCount > 20
                       || reassignCount > reassignTarget.transferable_count
                     }
-                    className="rounded-lg bg-[#FF6B35] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-[var(--ps-accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {reassignLoading ? 'Preparing…' : 'Preview transfers'}
                   </button>
@@ -742,7 +742,7 @@ export default function GradingConsolePage() {
                           setReassignCount(current => Math.min(current, 20, available))
                           setReassignError('')
                         }}
-                        className="mt-1 block w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-[var(--text-primary)] focus:border-[#FF6B35] focus:outline-none"
+                        className="mt-1 block w-full rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-[var(--text-primary)] focus:border-[var(--ps-accent)] focus:outline-none"
                       >
                         <option value="">Automatic (recommended)</option>
                         {reassignPreview.eligible_sources.map(source => (
@@ -763,7 +763,7 @@ export default function GradingConsolePage() {
                           setReassignCount(Number(event.target.value))
                           setReassignError('')
                         }}
-                        className="mt-1 block w-28 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-[var(--text-primary)] focus:border-[#FF6B35] focus:outline-none"
+                        className="mt-1 block w-28 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-[var(--text-primary)] focus:border-[var(--ps-accent)] focus:outline-none"
                       />
                     </label>
                     <button
@@ -777,7 +777,7 @@ export default function GradingConsolePage() {
                         || reassignCount > selectedSourceAvailable
                         || reassignmentPreviewIsCurrent
                       }
-                      className="rounded-lg border border-[#FF6B35] px-4 py-2 text-sm font-medium text-[#FF6B35] hover:bg-[#FF6B35]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg border border-[var(--ps-accent)] px-4 py-2 text-sm font-medium text-[var(--ps-accent)] hover:bg-[var(--ps-accent)]/10 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {reassignLoading ? 'Updating…' : 'Update preview'}
                     </button>
@@ -841,7 +841,7 @@ export default function GradingConsolePage() {
                     type="button"
                     onClick={commitReassignment}
                     disabled={reassignLoading || !reassignmentPreviewIsCurrent}
-                    className="rounded-lg bg-[#FF6B35] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-[var(--ps-accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {reassignLoading ? 'Transferring…' : `Confirm ${reassignPreview.count} transfers`}
                   </button>

@@ -585,8 +585,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       <header className="bg-[var(--bg-surface)] border-b border-[var(--border)] px-4 py-3 flex flex-wrap gap-3 items-center justify-between shrink-0">
         <div className="min-w-0 flex items-center gap-3">
           <Image
-            src="/PlexTechLogo.png"
-            alt="PlexTech"
+            src="/product-space-logo.png"
+            alt="Product Space"
             width={23}
             height={34}
             className="h-8 w-auto shrink-0"
@@ -596,7 +596,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           <div className="min-w-0">
             <h1 className="font-bold text-[var(--text-primary)] truncate">{session.name}</h1>
             <p className="text-xs text-gray-500">
-              ID: <button onClick={copySessionId} className="font-mono font-bold text-[#FF6B35] hover:opacity-70 transition-opacity cursor-pointer" title="Click to copy">{idCopied ? 'Copied!' : sessionId}</button>
+              ID: <button onClick={copySessionId} className="font-mono font-bold text-[var(--ps-accent)] hover:opacity-70 transition-opacity cursor-pointer" title="Click to copy">{idCopied ? 'Copied!' : sessionId}</button>
               {' · '}{memberCount} members
               {' · '}
               <span className={session.status === 'active' ? 'text-green-600' : 'text-red-500'}>{session.status}</span>
@@ -613,7 +613,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               onClick={() => bulkMode ? exitBulkMode() : setBulkMode(true)}
               className={`text-xs border px-2.5 py-1.5 rounded-lg transition-colors ${
                 bulkMode
-                  ? 'bg-[#FF6B35]/15 text-[#FF6B35] border-[#FF6B35]/40'
+                  ? 'bg-[var(--ps-accent)]/15 text-[var(--ps-accent)] border-[var(--ps-accent)]/40'
                   : 'text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -656,7 +656,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       </header>
 
       {focused && <div className="shrink-0 flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm">
-        <button className="text-[#FF6B35] hover:underline" onClick={() => { setSelectedId(focused.id); setViewMode('candidate'); setFilterStatus('all'); setSearch('') }}>Currently discussing: {focused.name} — return to focus</button>
+        <button className="text-[var(--ps-accent)] hover:underline" onClick={() => { setSelectedId(focused.id); setViewMode('candidate'); setFilterStatus('all'); setSearch('') }}>Currently discussing: {focused.name} — return to focus</button>
         {authSession?.user?.role === 'admin' && session.status === 'active' && <button className="ml-auto text-xs text-[var(--text-muted)]" disabled={controlBusy} onClick={() => void updateControl({ action: 'focus', candidate_id: null })}>Clear focus</button>}
       </div>}
       <div className="shrink-0 max-h-[40vh] overflow-y-auto border-b border-[var(--border)] bg-[var(--bg-surface)]">
@@ -734,7 +734,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             title={sidebarExpanded ? 'Use compact sidebar' : 'Expand sidebar'}
             aria-label={sidebarExpanded ? 'Use compact sidebar' : 'Expand sidebar'}
             aria-pressed={sidebarExpanded}
-            className="absolute -right-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-muted)] shadow-sm transition-colors hover:border-[#FF6B35]/50 hover:text-[#FF6B35]"
+            className="absolute -right-3 top-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-muted)] shadow-sm transition-colors hover:border-[var(--ps-accent)]/50 hover:text-[var(--ps-accent)]"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {sidebarExpanded ? (
@@ -755,7 +755,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <div className="shrink-0">
               <button
                 onClick={() => setShowAdminPanel(!showAdminPanel)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold transition-colors border-b border-[var(--border)] plex-gradient-text hover:opacity-80"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold transition-colors border-b border-[var(--border)] ps-gradient-text hover:opacity-80"
               >
                 <span className="uppercase tracking-widest">Admin</span>
                 <span className="text-gray-600 text-[10px]">{showAdminPanel ? '▲' : '▼'}</span>
@@ -777,7 +777,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search candidates..."
-              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
             />
           </div>
 
@@ -786,7 +786,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             {(['all', 'pending', 'accepted', 'rejected', 'hold'] as const).map(s => (
               <button key={s} onClick={() => setFilterStatus(s)}
                 className={`shrink-0 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  filterStatus === s ? 'plex-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  filterStatus === s ? 'ps-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                 }`}>
                 {s === 'all' ? `All (${statusCounts.all})` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${statusCounts[s]})`}
               </button>
@@ -813,8 +813,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   <div
                     key={c.id}
                     className={`flex items-center border-b border-[var(--border)]/50 transition-colors hover:bg-[var(--bg-raised)]${
-                      isSelected ? ' bg-[var(--bg-raised)] border-l-2 border-l-[#FF6B35]' : ''
-                    }${isChecked ? ' bg-[#FF6B35]/10' : ''}`}
+                      isSelected ? ' bg-[var(--bg-raised)] border-l-2 border-l-[var(--ps-accent)]' : ''
+                    }${isChecked ? ' bg-[var(--ps-accent)]/10' : ''}`}
                   >
                     {isAdmin && bulkMode && (
                       <input
@@ -822,7 +822,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                         checked={isChecked}
                         onChange={() => toggleCandidateSelection(c.id)}
                         aria-label={`Select ${c.name}`}
-                        className="ml-3 h-4 w-4 shrink-0 accent-[#FF6B35]"
+                        className="ml-3 h-4 w-4 shrink-0 accent-[var(--ps-accent)]"
                       />
                     )}
                     <button
@@ -928,7 +928,7 @@ function ListView({
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search candidates..."
-          className="w-full max-w-sm bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+          className="w-full max-w-sm bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
         />
       </div>
 
@@ -944,7 +944,7 @@ function ListView({
                     checked={allVisibleSelected}
                     onChange={toggleAllVisible}
                     aria-label="Select all visible candidates"
-                    className="h-4 w-4 accent-[#FF6B35]"
+                    className="h-4 w-4 accent-[var(--ps-accent)]"
                   />
                 </th>
               )}
@@ -968,7 +968,7 @@ function ListView({
                 <tr
                   key={c.id}
                   onClick={() => bulkMode ? onToggleSelection(c.id) : onSelect(c)}
-                  className={`border-b border-[var(--border)]/50 hover:bg-[var(--bg-raised)] cursor-pointer transition-colors ${selectedIds.has(c.id) ? 'bg-[#FF6B35]/10' : ''}`}
+                  className={`border-b border-[var(--border)]/50 hover:bg-[var(--bg-raised)] cursor-pointer transition-colors ${selectedIds.has(c.id) ? 'bg-[var(--ps-accent)]/10' : ''}`}
                 >
                   {bulkMode && (
                     <td className="px-3 py-3 text-center" onClick={event => event.stopPropagation()}>
@@ -977,7 +977,7 @@ function ListView({
                         checked={selectedIds.has(c.id)}
                         onChange={() => onToggleSelection(c.id)}
                         aria-label={`Select ${c.name}`}
-                        className="h-4 w-4 accent-[#FF6B35]"
+                        className="h-4 w-4 accent-[var(--ps-accent)]"
                       />
                     </td>
                   )}
@@ -1160,7 +1160,7 @@ function CandidateDetail({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="truncate text-2xl font-bold text-[var(--text-primary)]">{candidate.name}</h2>
           <GenderBadge gender={candidate.data?.gender} />
-          {onFocus && <button onClick={onFocus} disabled={focusBusy} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[#FF6B35] disabled:opacity-40" title="Show this applicant to everyone in the session">Focus everyone</button>}
+          {onFocus && <button onClick={onFocus} disabled={focusBusy} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--ps-accent)] disabled:opacity-40" title="Show this applicant to everyone in the session">Focus everyone</button>}
         </div>
         <span className={`shrink-0 text-xs px-2.5 py-1 rounded-full font-medium border ${STATUS_BADGE[candidate.status]}`}>
           {candidate.status}
@@ -1173,7 +1173,7 @@ function CandidateDetail({
 
       {candidate.applicant_id && applicantInfo && (
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#FF6B35]">Applicant materials</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--ps-accent)]">Applicant materials</p>
           <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-[var(--text-primary)]">Attended infosession?</span>
@@ -1197,7 +1197,7 @@ function CandidateDetail({
                 href={safeExternalUrl(applicantInfo.linkedin)!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[#FF6B35]/50"
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--ps-accent)]/50"
               >
                 Open LinkedIn ↗
               </a>
@@ -1207,7 +1207,7 @@ function CandidateDetail({
                 href={safeExternalUrl(applicantInfo.website)!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[#FF6B35]/50"
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--ps-accent)]/50"
               >
                 Open website ↗
               </a>
@@ -1217,7 +1217,7 @@ function CandidateDetail({
                 href={`/api/applicants/${candidate.applicant_id}/resume?format=pdf`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[#FF6B35]/50"
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--ps-accent)]/50"
               >
                 Open résumé ↗
               </a>
@@ -1264,7 +1264,7 @@ function CandidateDetail({
             {essaysLoading && <p className="text-xs text-[var(--text-muted)]">Loading…</p>}
             {essays && essays.map((e, i) => (
               <div key={i}>
-                <p className="text-xs font-semibold text-[#ff8a00] uppercase tracking-wider mb-1">
+                <p className="text-xs font-semibold text-[var(--ps-accent)] uppercase tracking-wider mb-1">
                   Question {e.prompt.question_number}
                 </p>
                 <p className="text-xs text-[var(--text-muted)] mb-1.5">{e.prompt.prompt}</p>
@@ -1280,11 +1280,11 @@ function CandidateDetail({
       {/* Grader essay comments (rubric rounds) */}
       <GraderComments reviews={candidate.grader_reviews} />
 
-      <div className="mb-6 rounded-xl border border-[#FF6B35]/30 bg-[#FF6B35]/5 overflow-hidden">
+      <div className="mb-6 rounded-xl border border-[var(--ps-accent)]/30 bg-[var(--ps-accent)]/5 overflow-hidden">
         <div className="px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#FF6B35]">Coffee chats</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ps-accent)]">Coffee chats</p>
               {coffeeChats.length > 0 ? (
                 <p className="text-sm text-[var(--text-secondary)] mt-1">
                   <span className="font-medium text-[var(--text-primary)]">Coffee chatters:</span>{' '}
@@ -1300,7 +1300,7 @@ function CandidateDetail({
               type="button"
               onClick={() => void loadCoffeeChats(true)}
               disabled={coffeeChatsLoading}
-              className="rounded-lg border border-[#FF6B35]/30 bg-[var(--bg-raised)] px-3 py-1.5 text-xs font-semibold text-[#FF6B35] transition-opacity hover:opacity-80 disabled:cursor-wait disabled:opacity-50"
+              className="rounded-lg border border-[var(--ps-accent)]/30 bg-[var(--bg-raised)] px-3 py-1.5 text-xs font-semibold text-[var(--ps-accent)] transition-opacity hover:opacity-80 disabled:cursor-wait disabled:opacity-50"
             >
               {coffeeChatsLoading ? 'Resyncing…' : 'Resync coffee chat notes'}
             </button>
@@ -1312,7 +1312,7 @@ function CandidateDetail({
             <button
               type="button"
               onClick={() => setCoffeeChatsOpen(open => !open)}
-              className="mt-2 text-sm font-medium text-[#FF6B35] hover:opacity-80 transition-opacity cursor-pointer"
+              className="mt-2 text-sm font-medium text-[var(--ps-accent)] hover:opacity-80 transition-opacity cursor-pointer"
               aria-expanded={coffeeChatsOpen}
             >
               {coffeeChatsOpen ? 'Hide coffee chat notes' : `View coffee chat notes (${coffeeChats.length})`}
@@ -1321,7 +1321,7 @@ function CandidateDetail({
         </div>
 
         {coffeeChats.length > 0 && coffeeChatsOpen && (
-            <div className="border-t border-[#FF6B35]/20 px-4 py-3 space-y-3">
+            <div className="border-t border-[var(--ps-accent)]/20 px-4 py-3 space-y-3">
               {coffeeChats.map(chat => (
                 <div key={chat.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-raised)]/80 p-3">
                   <div className="flex items-center justify-between gap-3 mb-2">
@@ -1330,7 +1330,7 @@ function CandidateDetail({
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         chat.is_coffee_chat === false
                           ? 'border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-muted)]'
-                          : 'border-[#FF6B35]/30 bg-[#FF6B35]/10 text-[#FF6B35]'
+                          : 'border-[var(--ps-accent)]/30 bg-[var(--ps-accent)]/10 text-[var(--ps-accent)]'
                       }`}>
                         {chat.is_coffee_chat === false ? 'Not marked as coffee chat' : 'Coffee chat'}
                       </span>
@@ -1479,7 +1479,7 @@ function CandidateDetail({
               onChange={e => setNoteText(e.target.value)}
               placeholder="Write a note..."
               rows={2}
-              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[#FF6B35] resize-none"
+              className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--ps-accent)] resize-none"
             />
             <div className="flex gap-2">
               <button
@@ -1625,7 +1625,7 @@ function GraderComments({ reviews }: { reviews?: GraderReview[] }) {
       <div className="px-4 pb-4 space-y-4">
         {sections.map(sec => (
           <div key={sec.label}>
-            <p className="text-xs font-semibold text-[#ff8a00] uppercase tracking-wider mb-1.5">{sec.label}</p>
+            <p className="text-xs font-semibold text-[var(--ps-accent)] uppercase tracking-wider mb-1.5">{sec.label}</p>
             <div className="space-y-1.5">
               {sec.entries.map((e, i) => (
                 <div key={i} className="text-sm text-[var(--text-secondary)]">
@@ -1670,19 +1670,19 @@ function InterviewDetails({ value, role }: { value: unknown; role: Session['role
   if (!isInterviewData(value)) return null
   const behavioral = value.format === 'behavioral_fa26'
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-[#FF6B35]/30 bg-[#FF6B35]/5">
+    <div className="mb-6 overflow-hidden rounded-xl border border-[var(--ps-accent)]/30 bg-[var(--ps-accent)]/5">
       <div className="space-y-3 px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#FF6B35]">Interview results</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ps-accent)]">Interview results</p>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               <span className="font-medium text-[var(--text-primary)]">Interviewers:</span>{' '}
               {value.interviewers.join(', ') || 'Not listed'}
             </p>
           </div>
-          <div className="rounded-lg border border-[#FF6B35]/25 bg-[var(--bg-raised)] px-3 py-2 text-right">
+          <div className="rounded-lg border border-[var(--ps-accent)]/25 bg-[var(--bg-raised)] px-3 py-2 text-right">
             <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{behavioral ? 'Behavioral average' : 'Overall score'}</p>
-            <p className="font-mono text-lg font-semibold text-[#FF6B35]">
+            <p className="font-mono text-lg font-semibold text-[var(--ps-accent)]">
               {value.overall_score === null ? (behavioral ? 'Awaiting behavioral scores' : '—') : value.overall_score.toFixed(2)}
             </p>
           </div>
@@ -1699,8 +1699,8 @@ function InterviewDetails({ value, role }: { value: unknown; role: Session['role
           </div>
         )}
       </div>
-      <details className="border-t border-[#FF6B35]/20">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[#FF6B35]">
+      <details className="border-t border-[var(--ps-accent)]/20">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[var(--ps-accent)]">
           View interviewer responses and comments ({value.records.length})
         </summary>
         <div className="space-y-3 px-4 pb-4">

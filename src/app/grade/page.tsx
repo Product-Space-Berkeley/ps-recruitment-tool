@@ -326,20 +326,20 @@ export default function GradePage() {
                 return (
                   <div key={round.id} className="space-y-2">
                     {isInterview && round.interview_form_url ? (
-                      <div className="bg-[var(--bg-surface)] border border-[#ff8a00]/40 rounded-xl p-5 space-y-3">
+                      <div className="bg-[var(--bg-surface)] border border-[var(--ps-accent)]/40 rounded-xl p-5 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
                             {cycleName && <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{cycleName}</p>}
                             <p className="font-semibold text-[var(--text-primary)]">{round.name}</p>
                             <p className="text-sm text-[var(--text-muted)] mt-0.5">Interview round — fill out the form below while interviewing</p>
                           </div>
-                          <span className="text-xs px-2 py-0.5 rounded-full border bg-[#ff8a00]/15 text-[#ff8a00] border-[#ff8a00]/30 font-medium">interview</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full border bg-[var(--ps-accent)]/15 text-[var(--ps-accent)] border-[var(--ps-accent)]/30 font-medium">interview</span>
                         </div>
                         <a
                           href={round.interview_form_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-[#ff8a00] text-white font-semibold hover:opacity-90 transition-opacity"
+                          className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-[var(--ps-accent)] text-white font-semibold hover:opacity-90 transition-opacity"
                         >
                           Open Interview Form ↗
                         </a>
@@ -362,14 +362,14 @@ export default function GradePage() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-2xl font-bold text-[#ff8a00]">{completed}/{total}</p>
+                            <p className="text-2xl font-bold text-[var(--ps-accent)]">{completed}/{total}</p>
                             <p className="text-xs text-[var(--text-muted)]">completed</p>
                           </div>
                         </div>
                         {total > 0 && (
                           <div className="mt-3 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-[#ff8a00] rounded-full transition-all"
+                              className="h-full bg-[var(--ps-accent)] rounded-full transition-all"
                               style={{ width: `${Math.round((completed / total) * 100)}%` }}
                             />
                           </div>
@@ -405,7 +405,7 @@ export default function GradePage() {
           {refreshMessage && <p className="text-sm text-[var(--text-muted)]">{refreshMessage}</p>}
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             <button
-              className="px-4 py-2 rounded-lg bg-[#ff8a00] text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-[var(--ps-accent)] text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
               onClick={checkForNewAssignments}
               disabled={refreshingAssignments}
             >
@@ -431,7 +431,7 @@ export default function GradePage() {
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">PlexTech Grader Portal</h1>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Product Space Grader Portal</h1>
           <button
             className="text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
             onClick={() => router.push('/dashboard')}
@@ -448,7 +448,7 @@ export default function GradePage() {
           </div>
           <div className="h-2 bg-[var(--border)] rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#ff8a00] rounded-full transition-all"
+              className="h-full bg-[var(--ps-accent)] rounded-full transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -490,7 +490,7 @@ export default function GradePage() {
                 const criteria = [e.prompt.criterion1, e.prompt.criterion2]
                 return (
                   <Section key={e.prompt.id} label={`Question ${i + 1}`}>
-                    <p className="text-sm font-medium text-[#ff8a00] mb-1">{e.prompt.prompt}</p>
+                    <p className="text-sm font-medium text-[var(--ps-accent)] mb-1">{e.prompt.prompt}</p>
                     <div className="bg-[var(--bg-raised)] rounded-lg p-3 mb-4 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
                       {e.response || <span className="text-[var(--text-muted)] italic">No response</span>}
                     </div>
@@ -630,7 +630,7 @@ export default function GradePage() {
                       <p className="text-xs text-amber-500">Please select a rating for all resume questions</p>
                     )}
                     <button
-                      className="w-full py-3 rounded-lg bg-[#ff8a00] text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full py-3 rounded-lg bg-[var(--ps-accent)] text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={handleSubmit}
                       disabled={submitting || !canSubmit}
                     >
@@ -661,7 +661,7 @@ function Field({ label, value }: { label: string; value: string }) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 space-y-4">
-      <h3 className="font-semibold text-[#ff8a00]">{label}</h3>
+      <h3 className="font-semibold text-[var(--ps-accent)]">{label}</h3>
       {children}
     </div>
   )
@@ -672,7 +672,7 @@ function CommentField({ label, value, onChange }: { label: string; value: string
     <div className="space-y-1">
       <label className="text-xs text-[var(--text-muted)]">{label}</label>
       <textarea
-        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] text-sm p-2 resize-y focus:outline-none focus:border-[#ff8a00] transition-colors"
+        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] text-sm p-2 resize-y focus:outline-none focus:border-[var(--ps-accent)] transition-colors"
         rows={3}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -691,23 +691,23 @@ const DEFAULT_RATING_DESCRIPTIONS: Record<number, string> = {
 }
 
 function getRatingDescriptions(question: string): Record<number, string> {
-  const normalized = question.toLowerCase()
+  const normalized = question.toLowerCase().replaceAll('plextech', 'product space')
 
-  if (normalized.includes('informed understanding of plextech')) {
+  if (normalized.includes('informed understanding of product space')) {
     return {
       1: 'No meaningful research; generic or copied website language',
-      2: 'Mentions PlexTech details, but understanding is surface-level',
-      3: 'Shows clear research using specific, accurate PlexTech details',
+      2: 'Mentions Product Space details, but understanding is surface-level',
+      3: 'Shows clear research using specific, accurate Product Space details',
       4: 'Shows deep research through projects, events, or member conversations',
     }
   }
 
-  if (normalized.includes('connect plextech to their goals')) {
+  if (normalized.includes('connect product space to their goals')) {
     return {
-      1: 'Does not connect PlexTech to personal goals or contributions',
+      1: 'Does not connect Product Space to personal goals or contributions',
       2: 'Makes a broad connection with little personal detail',
-      3: 'Clearly connects PlexTech to specific goals and contributions',
-      4: 'Presents a compelling, highly personal two-way fit with PlexTech',
+      3: 'Clearly connects Product Space to specific goals and contributions',
+      4: 'Presents a compelling, highly personal two-way fit with Product Space',
     }
   }
 
@@ -806,8 +806,8 @@ function RatingSelect({
                 aria-pressed={selected}
                 onClick={() => onChange(ratingValue)}
                 className={`min-h-24 rounded-lg border p-3 text-center transition-colors ${selected
-                  ? 'border-[#ff8a00] bg-[#ff8a00] text-white'
-                  : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:border-[#ff8a00]'
+                  ? 'border-[var(--ps-accent)] bg-[var(--ps-accent)] text-white'
+                  : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:border-[var(--ps-accent)]'
                 }`}
               >
                 <span className="block text-xl font-bold">{rating}</span>
@@ -824,7 +824,7 @@ function RatingSelect({
     <div className="space-y-1">
       <label className="text-xs text-[var(--text-secondary)]">{question}</label>
       <select
-        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] text-sm p-2 focus:outline-none focus:border-[#ff8a00] transition-colors"
+        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] text-sm p-2 focus:outline-none focus:border-[var(--ps-accent)] transition-colors"
         value={value}
         onChange={e => onChange(e.target.value)}
       >

@@ -1,112 +1,70 @@
 @import "tailwindcss";
 
-/* ── PlexTech brand ── */
+/* Product Space @ Berkeley: plum, purple, lilac, and neutral surfaces. */
 :root {
-  --plex-orange: #ff833d;
-  --plex-coral:  #f06751;
-  --plex-pink:   #e04867;
-  --plex-purple: #a736ce;
-  --plex-from:   var(--plex-orange);
-  --plex-to:     var(--plex-purple);
+  color-scheme: light;
+  --ps-accent: #7b3fa0;
+  --ps-purple: #633180;
+  --ps-lilac: #b987c8;
+  --bg-base: #f8f6fb;
+  --bg-surface: #ffffff;
+  --bg-raised: #f0eaf5;
+  --bg-active: #e7d9ee;
+  --border: #ded3e7;
+  --text-primary: #211629;
+  --text-secondary: #51425c;
+  --text-muted: #71617d;
+  --shadow-soft: 0 18px 55px rgba(48, 22, 65, 0.08);
 }
-
-/* ── Light theme (default) ── */
-:root {
-  --bg-base:        #fffaf6;
-  --bg-surface:     #ffffff;
-  --bg-raised:      #fff3ec;
-  --bg-active:      #ffe5d7;
-  --border:         #eadfd8;
-  --text-primary:   #241b2b;
-  --text-secondary: #514759;
-  --text-muted:     #7d7282;
-  --shadow-soft:    0 18px 55px rgba(89, 47, 76, 0.10);
-}
-
 html[data-theme="dark"] {
-  --bg-base:        #140f18;
-  --bg-surface:     #1d1623;
-  --bg-raised:      #2a1f31;
-  --bg-active:      #3b2a45;
-  --border:         #403247;
-  --text-primary:   #fff8f3;
-  --text-secondary: #e7dce9;
-  --text-muted:     #a99dac;
-  --shadow-soft:    0 18px 55px rgba(0, 0, 0, 0.26);
+  color-scheme: dark;
+  --ps-accent: #c399dc;
+  --bg-base: #130f1b;
+  --bg-surface: #1d1628;
+  --bg-raised: #2a2036;
+  --bg-active: #3d2b4e;
+  --border: #44334f;
+  --text-primary: #faf7fc;
+  --text-secondary: #ded3e5;
+  --text-muted: #b8a9c3;
+  --shadow-soft: 0 18px 55px rgba(0, 0, 0, 0.22);
 }
-
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-instrument-sans);
+  --font-mono: ui-monospace, monospace;
 }
-
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: "DM Sans", var(--font-geist-sans), sans-serif;
-  background-image:
-    radial-gradient(circle at 8% 4%, rgba(255, 131, 61, 0.14), transparent 28rem),
-    radial-gradient(circle at 92% 12%, rgba(167, 54, 206, 0.10), transparent 30rem);
+  font-family: var(--font-instrument-sans), sans-serif;
+  background-image: radial-gradient(ellipse at 0% 0%, rgba(130, 72, 162, 0.18), transparent 65%);
   background-attachment: fixed;
 }
-
-.plex-gradient {
-  background: linear-gradient(120deg, var(--plex-orange), var(--plex-coral) 35%, var(--plex-pink) 68%, var(--plex-purple));
-  box-shadow: 0 8px 22px rgba(224, 72, 103, 0.22);
+.ps-gradient {
+  background: linear-gradient(115deg, #713b91, #542d70);
+  box-shadow: 0 8px 22px rgba(99, 49, 128, 0.20);
 }
-.plex-gradient:hover { opacity: 0.88; }
-
-.plex-gradient-text {
-  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 58%, var(--plex-purple));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Shared portal surfaces: keeps dashboard, grading and admin visually aligned. */
-.bg-\[var\(--bg-surface\)\] {
-  box-shadow: var(--shadow-soft);
-}
-
-/* Deliberation needs clearer working surfaces than the marketing-style portal.
-   Keep the brand warmth, but give the queue, controls, and detail panel enough
-   separation to make long review sessions easier on the eyes. */
-:root:not([data-theme="dark"]) .deliberation-portal {
-  --bg-base:        #efeae6;
-  --bg-surface:     #fcfaf8;
-  --bg-raised:      #e7ddd6;
-  --bg-active:      #dfd0c5;
-  --border:         #d3c3b9;
-  --text-primary:   #2d2527;
-  --text-secondary: #584b4d;
-  --text-muted:     #76686b;
-  --shadow-soft:    0 12px 32px rgba(75, 53, 45, 0.08);
-}
-
-:root:not([data-theme="dark"]) .deliberation-portal {
-  background-image:
-    radial-gradient(circle at 92% 0%, rgba(255, 131, 61, 0.10), transparent 28rem),
-    linear-gradient(145deg, #f4f0ec 0%, #ebe4de 100%);
-}
-
-button, a, input, textarea, select {
-  transition-duration: 180ms;
-}
-
+.ps-gradient:hover { filter: brightness(1.12); }
+.ps-gradient-text { color: var(--ps-accent); }
+.bg-\[var\(--bg-surface\)\] { box-shadow: var(--shadow-soft); }
+.deliberation-portal { background: var(--bg-base); }
+button, a, input, textarea, select { transition-duration: 180ms; }
+button, a { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--ps-accent); outline-offset: 4px; }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--plex-orange) !important;
-  box-shadow: 0 0 0 3px rgba(255, 131, 61, 0.14);
+  border-color: var(--ps-accent) !important;
+  box-shadow: 0 0 0 3px rgba(160, 106, 186, 0.20);
 }
+img[src*="product-space-logo"] { object-fit: contain; }
 
 /* ── Applicant portal pages ─────────────────────────────── */
 
 .apply-page {
   flex: 1;
-  font-family: "DM Sans", sans-serif;
-  background-image:
-    linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,250,246,0.92)),
-    url("/shapes-background.png");
+  font-family: var(--font-instrument-sans), sans-serif;
+  background-image: radial-gradient(ellipse at top left, rgba(130,72,162,0.16), transparent 65%);
+  background-color: var(--bg-base);
   background-size: cover;
   background-repeat: no-repeat;
   background-attachment: fixed;
@@ -119,7 +77,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .apply-home-card {
-  background-color: white;
+  background-color: var(--bg-surface);
   border-radius: 28px;
   padding: 36px;
   border: 1px solid var(--border);
@@ -130,7 +88,7 @@ input:focus, textarea:focus, select:focus {
 
 .apply-form-card {
   position: relative;
-  background-color: white;
+  background-color: var(--bg-surface);
   border-radius: 28px;
   padding: 40px;
   border: 1px solid var(--border);
@@ -146,11 +104,11 @@ input:focus, textarea:focus, select:focus {
 
 .apply-page h1, .apply-page h2, .apply-page h3,
 .apply-page h4, .apply-page h5, .apply-page h6 {
-  color: black;
-  font-family: "DM Sans", sans-serif;
+  color: var(--text-primary);
+  font-family: var(--font-instrument-sans), sans-serif;
 }
-.apply-page h4 { color: grey; font-weight: 400; }
-.apply-page h6 { color: grey; font-weight: 400; }
+.apply-page h4 { color: var(--text-muted); font-weight: 400; }
+.apply-page h6 { color: var(--text-muted); font-weight: 400; }
 
 .apply-field {
   margin-bottom: 1.5rem;
@@ -160,9 +118,9 @@ input:focus, textarea:focus, select:focus {
 
 .apply-field label {
   font-weight: bold;
-  color: black;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-instrument-sans), sans-serif;
 }
 
 .apply-field input[type="text"],
@@ -171,14 +129,14 @@ input:focus, textarea:focus, select:focus {
 .apply-field textarea {
   padding: 0.65rem 0.5rem;
   font-size: 1rem;
-  font-family: "DM Sans", sans-serif;
-  border: 1px solid #b7b7b7;
+  font-family: var(--font-instrument-sans), sans-serif;
+  border: 1px solid var(--border);
   border-radius: 5px;
   background-color: transparent;
-  color: black;
+  color: var(--text-primary);
   width: 100%;
   max-width: 400px;
-  caret-color: #ff8a00;
+  caret-color: var(--ps-accent);
 }
 
 .apply-field textarea {
@@ -194,30 +152,30 @@ input:focus, textarea:focus, select:focus {
 }
 
 .apply-btn-primary {
-  background-color: white;
+  background-color: var(--bg-surface);
   color: white;
   border: 0;
-  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 62%, var(--plex-purple));
+  background: linear-gradient(115deg, #713b91, #542d70);
   border-radius: 12px;
   padding: 0.5rem 1.25rem;
   font-size: 1rem;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-instrument-sans), sans-serif;
   font-weight: bold;
   cursor: pointer;
   margin-bottom: 1rem;
   transition: background-color 0.2s, color 0.2s;
 }
-.apply-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(224,72,103,0.22); }
+.apply-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(99,49,128,0.22); }
 .apply-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .apply-btn-secondary {
-  background-color: white;
-  color: var(--plex-coral);
-  border: 2px solid rgba(240, 103, 81, 0.55);
+  background-color: var(--bg-surface);
+  color: var(--ps-accent);
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: 0.5rem 1.25rem;
   font-size: 1rem;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-instrument-sans), sans-serif;
   font-weight: bold;
   cursor: pointer;
   margin-bottom: 1rem;
@@ -227,28 +185,28 @@ input:focus, textarea:focus, select:focus {
 .apply-btn-secondary:hover {
   color: white;
   border-color: transparent;
-  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 62%, var(--plex-purple));
-  box-shadow: 0 8px 20px rgba(224,72,103,0.18);
+  background: linear-gradient(115deg, #713b91, #542d70);
+  box-shadow: 0 8px 20px rgba(99,49,128,0.18);
 }
 
 /* Multi-select race dropdown */
 .apply-multiselect {
   min-height: 2.5rem;
   padding: 0.4rem 0.5rem;
-  border: 1px solid #b7b7b7;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: white;
+  background: var(--bg-surface);
   cursor: pointer;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   max-width: 400px;
-  color: black;
+  color: var(--text-primary);
 }
 
 .apply-chip {
-  background-color: #ffe8d0;
-  color: #ff8a00;
+  background-color: var(--bg-active);
+  color: var(--ps-accent);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 0.85rem;
@@ -258,8 +216,8 @@ input:focus, textarea:focus, select:focus {
 .apply-dropdown {
   position: absolute;
   z-index: 10;
-  background: white;
-  border: 1px solid #b7b7b7;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 5px;
   max-width: 400px;
   width: 100%;
@@ -272,10 +230,10 @@ input:focus, textarea:focus, select:focus {
   padding: 0.5rem 0.75rem;
   cursor: pointer;
   font-size: 0.9rem;
-  color: black;
+  color: var(--text-primary);
 }
-.apply-dropdown-item:hover { background-color: #fff3e8; }
-.apply-dropdown-item.selected { background-color: #ffe8d0; color: #ff8a00; font-weight: 500; }
+.apply-dropdown-item:hover { background-color: var(--bg-raised); }
+.apply-dropdown-item.selected { background-color: var(--bg-active); color: var(--ps-accent); font-weight: 500; }
 
 /* ── Slim scrollbars ── */
 * {
@@ -286,3 +244,12 @@ input:focus, textarea:focus, select:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bg-active); }
+
+.ps-entry { background-image: radial-gradient(ellipse at top left, rgba(130,72,162,.22), transparent 70%); }
+.apply-page h1 { font-size: clamp(1.75rem, 4vw, 2.4rem); font-weight: 600; line-height: 1.2; }
+.apply-page h2 { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 600; line-height: 1.25; margin-bottom: 1rem; }
+.apply-page h4 { margin-top: .75rem; }
+.apply-home-card > img { margin-bottom: 1.5rem !important; width: 44px; height: 60px; }
+@media (max-width: 480px) {
+  .apply-home-card, .apply-form-card { padding: 24px; border-radius: 20px; }
+}

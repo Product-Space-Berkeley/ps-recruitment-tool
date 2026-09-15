@@ -60,7 +60,7 @@ export default function BehavioralSyncPanel({ cycleId, sessionId, rounds = [], a
         {preview.unresolved.map(row => <label className="block" key={row.name}>{row.name} (rows {row.rows.join(', ')})<select className="ml-2 border rounded bg-[var(--bg-raised)]" value={resolutions[row.name.toLowerCase().trim()] ?? ''} onChange={e => setResolutions({ ...resolutions, [row.name.toLowerCase().trim()]: e.target.value })}><option value="">Choose applicant</option>{preview.roster.map(p => <option key={p.id} value={p.id}>{p.name} — {p.role}</option>)}<option value="exclude">Exclude this name</option></select></label>)}
         <details><summary>Applicant score preview</summary>{preview.candidates.map(p => <p key={p.id}>{p.name} · {p.role}: {p.score === null ? 'Awaiting behavioral scores' : p.score.toFixed(2)} ({p.responses} responses)</p>)}</details>
         {!!preview.incomplete.length && <p>{preview.incomplete.length} incomplete responses will be visible but not scored.</p>}
-        <button disabled={busy || preview.unresolved.some(r => !resolutions[r.name.toLowerCase().trim()])} onClick={() => void act('connect')} className="bg-[#FF6B35] text-white rounded px-3 py-2">Connect and sync both final rounds</button>
+        <button disabled={busy || preview.unresolved.some(r => !resolutions[r.name.toLowerCase().trim()])} onClick={() => void act('connect')} className="bg-[var(--ps-accent)] text-white rounded px-3 py-2">Connect and sync both final rounds</button>
       </div>}
       {status?.sessions?.map(s => <a key={s.id} href={`/session/${s.id}`} className="inline-block mr-4 underline">Open {s.role} final session</a>)}
     </>}

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Deliberation | PlexTech - Berkeley',
+  title: 'Deliberation | Product Space @ Berkeley',
 }
 
 export default function SessionLayout({ children }: { children: React.ReactNode }) {

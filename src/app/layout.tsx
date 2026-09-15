@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
+import { Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 
-const dmSans = DM_Sans({
+const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
   display: "swap",
+  variable: "--font-instrument-sans",
 });
 
 export const metadata: Metadata = {
-  title: "Login | PlexTech - Berkeley",
-  description: "PlexTech - Berkeley recruitment portal",
+  title: "Login | Product Space @ Berkeley",
+  description: "Applications, reviews, and recruitment for Product Space @ Berkeley.",
+  icons: { icon: "/product-space-logo.png" },
 };
 
 export default function RootLayout({
@@ -29,21 +31,12 @@ export default function RootLayout({
           try {
             var t = localStorage.getItem('theme');
             var el = document.documentElement;
-            el.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
-            if (t !== 'dark') {
-              el.style.setProperty('--bg-base',        '#fffaf6');
-              el.style.setProperty('--bg-surface',     '#ffffff');
-              el.style.setProperty('--bg-raised',      '#fff3ec');
-              el.style.setProperty('--bg-active',      '#ffe5d7');
-              el.style.setProperty('--border',         '#eadfd8');
-              el.style.setProperty('--text-primary',   '#241b2b');
-              el.style.setProperty('--text-secondary', '#514759');
-              el.style.setProperty('--text-muted',     '#7d7282');
-            }
+            el.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+
           } catch(e) {}
         `}} />
       </head>
-      <body className={`${dmSans.className} min-h-full flex flex-col`}><SessionProvider>{children}</SessionProvider></body>
+      <body className={`${instrumentSans.className} ${instrumentSans.variable} min-h-full flex flex-col`}><SessionProvider>{children}</SessionProvider></body>
     </html>
   );
 }

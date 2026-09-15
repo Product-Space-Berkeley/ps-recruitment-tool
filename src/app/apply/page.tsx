@@ -61,10 +61,10 @@ export default function ApplyHome() {
   return (
     <div className="apply-page">
       <div className="apply-home-card">
-        <Image src="/PlexTechLogo.png" alt="PlexTech logo" width={35} height={35} style={{ marginBottom: '0.5rem' }} />
-        <h2>Welcome to the PlexTech Application Platform!</h2>
+        <Image src="/product-space-logo.png" alt="Product Space logo" width={35} height={35} style={{ marginBottom: '0.5rem' }} />
+        <h2>Welcome to the Product Space Application Platform!</h2>
         {loading ? null : loadError ? (
-          <div style={{ color: '#ec6f34' }} role="status">
+          <div style={{ color: 'var(--ps-accent)' }} role="status">
             <h4>Application information is temporarily unavailable.</h4>
             <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Please refresh and try again shortly.</p>
           </div>
@@ -72,13 +72,13 @@ export default function ApplyHome() {
           <>
             <h4>If you are an applicant, please proceed to the application form.</h4>
             {cycle?.application_deadline && (
-              <p style={{ color: '#ec6f34', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              <p style={{ color: 'var(--ps-accent)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
                 Applications close on {new Date(cycle.application_deadline).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Los_Angeles' })} PT
               </p>
             )}
           </>
         ) : (
-          <div style={{ color: '#ec6f34' }}>
+          <div style={{ color: 'var(--ps-accent)' }}>
             <h4>Applications are now closed.</h4>
             <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
               Please apply again in Spring 2027!
@@ -101,8 +101,8 @@ export default function ApplyHome() {
         </div>
       </div>
 
-      <footer style={{ textAlign: 'center', marginTop: '2rem', color: 'grey', fontSize: '0.85rem' }}>
-        Copyright © 2026 PlexTech All Rights Reserved. &nbsp;·&nbsp;
+      <footer style={{ textAlign: 'center', marginTop: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+        Copyright © 2026 Product Space All Rights Reserved. &nbsp;·&nbsp;
         <span
           style={{ textDecoration: 'underline', cursor: 'pointer' }}
           onClick={() => router.push('/apply/privacy-policy')}

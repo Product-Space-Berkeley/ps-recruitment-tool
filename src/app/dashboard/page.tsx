@@ -216,8 +216,8 @@ export default function Dashboard() {
       <header className="bg-[var(--bg-surface)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Image
-            src="/PlexTechLogo.png"
-            alt="PlexTech"
+            src="/product-space-logo.png"
+            alt="Product Space"
             width={23}
             height={34}
             className="h-8 w-auto shrink-0"
@@ -261,7 +261,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <p className="font-medium text-[var(--text-primary)] text-sm">Grading Queue</p>
               {pendingGrading !== null && pendingGrading > 0 && (
-                <span className="text-xs bg-[#FF6B35] text-white font-bold px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-[var(--ps-accent)] text-white font-bold px-2 py-0.5 rounded-full">
                   {pendingGrading}
                 </span>
               )}
@@ -280,14 +280,14 @@ export default function Dashboard() {
         <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border)] overflow-hidden">
           <div className="flex border-b border-[var(--border)]">
             <button
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === 'join' ? 'plex-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === 'join' ? 'ps-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
               onClick={() => setTab('join')}
             >
               Join Session
             </button>
             {canCreateSession(user.role) && (
               <button
-                className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === 'create' ? 'plex-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === 'create' ? 'ps-gradient text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
                 onClick={() => setTab('create')}
               >
                 Create Session
@@ -304,11 +304,11 @@ export default function Dashboard() {
                   value={joinSessionId}
                   onChange={(e) => setJoinSessionId(e.target.value.toUpperCase())}
                   placeholder="e.g. ABC123"
-                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35] font-mono text-lg tracking-widest"
+                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)] font-mono text-lg tracking-widest"
                 />
                 {joinError && <p className="text-red-400 text-sm">{joinError}</p>}
                 <button type="submit" disabled={joinLoading}
-                  className="w-full plex-gradient disabled:opacity-50 text-white font-medium py-2 rounded-lg">
+                  className="w-full ps-gradient disabled:opacity-50 text-white font-medium py-2 rounded-lg">
                   {joinLoading ? 'Joining...' : 'Join Session'}
                 </button>
               </form>
@@ -320,11 +320,11 @@ export default function Dashboard() {
                   value={createSessionName}
                   onChange={(e) => setCreateSessionName(e.target.value)}
                   placeholder="e.g. Spring 2026 Delibs"
-                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                  className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                 />
                 {createError && <p className="text-red-400 text-sm">{createError}</p>}
                 <button type="submit" disabled={createLoading}
-                  className="w-full plex-gradient disabled:opacity-50 text-white font-medium py-2 rounded-lg">
+                  className="w-full ps-gradient disabled:opacity-50 text-white font-medium py-2 rounded-lg">
                   {createLoading ? 'Creating...' : 'Create Session'}
                 </button>
               </form>
@@ -346,7 +346,7 @@ export default function Dashboard() {
                   <div className="min-w-0">
                     <p className="font-medium text-[var(--text-primary)] truncate">{session.name}</p>
                     <p
-                      className="text-xs font-mono mt-0.5 text-[#FF6B35] hover:opacity-70 transition-opacity w-fit"
+                      className="text-xs font-mono mt-0.5 text-[var(--ps-accent)] hover:opacity-70 transition-opacity w-fit"
                       onClick={(e) => copyId(session.id, e)}
                       title="Click to copy"
                     >
@@ -385,25 +385,25 @@ export default function Dashboard() {
                   value={newEmail}
                   onChange={e => { setNewEmail(e.target.value); setUserError('') }}
                   placeholder="email@berkeley.edu"
-                  className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[#FF6B35]"
+                  className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--ps-accent)]"
                 />
                 <select
                   value={newRole}
                   onChange={e => setNewRole(e.target.value as UserRole)}
-                  className="bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B35]"
+                  className="bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-2 py-2 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--ps-accent)]"
                 >
                   <option value="grader">Grader</option>
                   <option value="leadership">Leadership</option>
                   <option value="admin">Admin</option>
                 </select>
-                <button type="submit" className="plex-gradient text-white text-sm px-3 py-2 rounded-lg shrink-0">
+                <button type="submit" className="ps-gradient text-white text-sm px-3 py-2 rounded-lg shrink-0">
                   Add
                 </button>
               </form>
 
               {/* Bulk add */}
               <div>
-                <button onClick={() => setShowBulk(!showBulk)} className="text-xs text-[#FF6B35] hover:opacity-80">
+                <button onClick={() => setShowBulk(!showBulk)} className="text-xs text-[var(--ps-accent)] hover:opacity-80">
                   {showBulk ? 'Hide bulk add' : '+ Bulk add (paste list)'}
                 </button>
                 {showBulk && (
@@ -413,10 +413,10 @@ export default function Dashboard() {
                       onChange={e => setBulkEmails(e.target.value)}
                       placeholder="One email per line, or comma-separated"
                       rows={4}
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[#FF6B35] resize-none"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--ps-accent)] resize-none"
                     />
                     <p className="text-xs text-[var(--text-muted)]">All will be added with role: <strong>{newRole}</strong></p>
-                    <button type="submit" className="w-full plex-gradient text-white text-sm py-2 rounded-lg">
+                    <button type="submit" className="w-full ps-gradient text-white text-sm py-2 rounded-lg">
                       Add All
                     </button>
                   </form>

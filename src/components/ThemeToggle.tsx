@@ -1,7 +1,7 @@
 'use client'
 import { useSyncExternalStore } from 'react'
 
-const THEME_CHANGE_EVENT = 'plextech:theme-change'
+const THEME_CHANGE_EVENT = 'product-space:theme-change'
 
 function subscribeToTheme(onStoreChange: () => void) {
   const handleStorage = (event: StorageEvent) => {
@@ -16,36 +16,18 @@ function subscribeToTheme(onStoreChange: () => void) {
 }
 
 function getThemeSnapshot() {
-  return localStorage.getItem('theme') === 'dark'
+  return localStorage.getItem('theme') !== 'light'
 }
 
 function getServerThemeSnapshot() {
-  return false
+  return true
 }
 
 function applyTheme(dark: boolean) {
   const el = document.documentElement
   el.setAttribute('data-theme', dark ? 'dark' : 'light')
-  if (dark) {
-    el.style.setProperty('--bg-base',        '#140f18')
-    el.style.setProperty('--bg-surface',     '#1d1623')
-    el.style.setProperty('--bg-raised',      '#2a1f31')
-    el.style.setProperty('--bg-active',      '#3b2a45')
-    el.style.setProperty('--border',         '#403247')
-    el.style.setProperty('--text-primary',   '#fff8f3')
-    el.style.setProperty('--text-secondary', '#e7dce9')
-    el.style.setProperty('--text-muted',     '#a99dac')
-  } else {
-    el.style.setProperty('--bg-base',        '#fffaf6')
-    el.style.setProperty('--bg-surface',     '#ffffff')
-    el.style.setProperty('--bg-raised',      '#fff3ec')
-    el.style.setProperty('--bg-active',      '#ffe5d7')
-    el.style.setProperty('--border',         '#eadfd8')
-    el.style.setProperty('--text-primary',   '#241b2b')
-    el.style.setProperty('--text-secondary', '#514759')
-    el.style.setProperty('--text-muted',     '#7d7282')
-  }
 }
+
 
 export default function ThemeToggle() {
   const isDark = useSyncExternalStore(

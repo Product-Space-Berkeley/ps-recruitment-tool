@@ -336,19 +336,19 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
         <div className="flex border-b border-[var(--border)] shrink-0">
           <button
             onClick={() => setTab('session')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'session' ? 'text-[var(--text-primary)] border-b-2 border-[#FF6B35]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'session' ? 'text-[var(--text-primary)] border-b-2 border-[var(--ps-accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
           >
             Session
           </button>
           <button
             onClick={() => setTab('members')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'members' ? 'text-[var(--text-primary)] border-b-2 border-[#FF6B35]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'members' ? 'text-[var(--text-primary)] border-b-2 border-[var(--ps-accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
           >
             Members
           </button>
           <button
             onClick={() => setTab('emails')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'emails' ? 'text-[var(--text-primary)] border-b-2 border-[#FF6B35]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === 'emails' ? 'text-[var(--text-primary)] border-b-2 border-[var(--ps-accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
           >
             Emails
           </button>
@@ -368,7 +368,7 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                     {copied ? 'Copied!' : 'Copy'}
                   </span>
                 </p>
-                <p className="font-mono font-bold text-[#FF6B35] text-xl tracking-widest">{sessionId}</p>
+                <p className="font-mono font-bold text-[var(--ps-accent)] text-xl tracking-widest">{sessionId}</p>
               </button>
 
               {/* Import CSV */}
@@ -378,7 +378,7 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                   <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCSVImport} disabled={importing || session.status === 'ended'} className="hidden" id="csv-upload" />
                   <label
                     htmlFor="csv-upload"
-                    className={`flex-1 text-center px-3 py-2 rounded-lg text-sm font-medium cursor-pointer ${importing || session.status === 'ended' ? 'bg-[var(--bg-raised)] text-gray-600 cursor-not-allowed' : 'plex-gradient text-white'}`}
+                    className={`flex-1 text-center px-3 py-2 rounded-lg text-sm font-medium cursor-pointer ${importing || session.status === 'ended' ? 'bg-[var(--bg-raised)] text-gray-600 cursor-not-allowed' : 'ps-gradient text-white'}`}
                   >
                     {importing ? 'Importing...' : 'Upload File'}
                   </label>
@@ -397,10 +397,10 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                       onChange={e => setCsvText(e.target.value)}
                       placeholder="Paste CSV data here..."
                       rows={6}
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-xs font-mono focus:outline-none focus:border-[#FF6B35] resize-none"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-xs font-mono focus:outline-none focus:border-[var(--ps-accent)] resize-none"
                     />
                     <button type="submit" disabled={importing || !csvText.trim()}
-                      className="w-full plex-gradient disabled:opacity-40 text-white text-sm py-2 rounded-lg">
+                      className="w-full ps-gradient disabled:opacity-40 text-white text-sm py-2 rounded-lg">
                       Import Pasted CSV
                     </button>
                   </form>
@@ -421,7 +421,7 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                 <button
                   onClick={toggleAnonymous}
                   disabled={togglingAnon}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer group ${session.anonymous ? 'plex-gradient hover:opacity-80' : 'bg-[#1e2035] hover:bg-[#252545]'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer group ${session.anonymous ? 'ps-gradient hover:opacity-80' : 'bg-[#1e2035] hover:bg-[#252545]'}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-all group-hover:scale-110 shadow-sm ${session.anonymous ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -475,12 +475,12 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                     value={nextRoundName}
                     onChange={e => setNextRoundName(e.target.value)}
                     placeholder="New round name (e.g. Interviews)"
-                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[#FF6B35]"
+                    className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
                   />
                   <button
                     onClick={handleAdvanceRound}
                     disabled={advancing}
-                    className="w-full plex-gradient disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
+                    className="w-full ps-gradient disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
                   >
                     {advancing ? 'Creating…' : 'Advance Accepted Candidates →'}
                   </button>
@@ -590,9 +590,9 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                   value={newEmail}
                   onChange={e => { setNewEmail(e.target.value); setEmailError('') }}
                   placeholder="email@berkeley.edu"
-                  className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[#FF6B35]"
+                  className="flex-1 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--ps-accent)]"
                 />
-                <button type="submit" className="plex-gradient text-white text-sm px-3 py-2 rounded-lg shrink-0">
+                <button type="submit" className="ps-gradient text-white text-sm px-3 py-2 rounded-lg shrink-0">
                   Add
                 </button>
               </form>
@@ -601,7 +601,7 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
               <div>
                 <button
                   onClick={() => setShowBulk(!showBulk)}
-                  className="text-xs text-[#FF6B35] hover:opacity-80"
+                  className="text-xs text-[var(--ps-accent)] hover:opacity-80"
                 >
                   {showBulk ? 'Hide bulk add' : '+ Bulk add (paste list)'}
                 </button>
@@ -612,9 +612,9 @@ export default function AdminPanel({ session, sessionId, onRefresh, onVouchesRes
                       onChange={e => setBulkEmails(e.target.value)}
                       placeholder="One email per line, or comma-separated"
                       rows={4}
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[#FF6B35] resize-none"
+                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--ps-accent)] resize-none"
                     />
-                    <button type="submit" className="w-full plex-gradient text-white text-sm py-2 rounded-lg">
+                    <button type="submit" className="w-full ps-gradient text-white text-sm py-2 rounded-lg">
                       Add All
                     </button>
                   </form>

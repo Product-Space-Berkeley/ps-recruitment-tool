@@ -417,7 +417,7 @@ export default function ApplicationForm() {
       }
       router.push(`/apply/success?id=${id}&name=${encodeURIComponent(firstName)}`)
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred. Please contact plextech@berkeley.edu.')
+      setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred. Please contact contact@product.berkeley.edu.')
     } finally {
       setSubmitting(false)
     }
@@ -435,7 +435,7 @@ export default function ApplicationForm() {
     return (
       <div className="apply-page">
         <div className="apply-home-card">
-          <Image src="/PlexTechLogo.png" alt="PlexTech" width={50} height={50} />
+          <Image src="/product-space-logo.png" alt="Product Space" width={50} height={50} />
           <h2>Verify your email</h2>
           <p>Sign in with any verified Google account before starting your application.</p>
           <button
@@ -453,7 +453,7 @@ export default function ApplicationForm() {
     return (
       <div className="apply-page">
         <div className="apply-home-card">
-          <Image src="/PlexTechLogo.png" alt="PlexTech" width={50} height={50} />
+          <Image src="/product-space-logo.png" alt="Product Space" width={50} height={50} />
           <h2>{loadError ? 'Application temporarily unavailable' : 'Loading application…'}</h2>
           {loadError && (
             <>
@@ -478,15 +478,15 @@ export default function ApplicationForm() {
         </div>
 
         <div className="apply-form-title">
-          <Image src="/PlexTechLogo.png" alt="PlexTech" width={80} height={80} />
-          <h1>PlexTech Application — {cycle.name}</h1>
-          <h4>Thank you for your interest in PlexTech!<br />Please fill out the information below and we will get back to you soon.</h4>
+          <Image src="/product-space-logo.png" alt="Product Space" width={80} height={80} />
+          <h1>Product Space Application — {cycle.name}</h1>
+          <h4>Thank you for your interest in Product Space!<br />Please fill out the information below and we will get back to you soon.</h4>
           <p>All applications submitted are final; duplicates will not be accepted.</p>
           {draftMessage && (
             <p aria-live="polite" style={{ color: '#6b7280', fontSize: '0.9rem' }}>{draftMessage}</p>
           )}
           {cycle.application_deadline && (
-            <p style={{ color: '#ec6f34' }}>
+            <p style={{ color: 'var(--ps-accent)' }}>
               Applications close on {new Date(cycle.application_deadline).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Los_Angeles' })} PT
             </p>
           )}
@@ -565,7 +565,7 @@ export default function ApplicationForm() {
 
         <div className="apply-field" ref={raceRef}>
           <label>Your Demographic Background</label>
-          <p style={{ margin: '0.25rem 0 0.5rem', color: 'grey' }}>Please be ensured that this has absolutely no impact on your application.</p>
+          <p style={{ margin: '0.25rem 0 0.5rem', color: 'var(--text-muted)' }}>Please be ensured that this has absolutely no impact on your application.</p>
           <div className="apply-multiselect" onClick={() => setRaceDropdownOpen(o => !o)}>
             {race.length === 0
               ? <span style={{ color: '#999' }}>Select from below</span>
@@ -604,7 +604,7 @@ export default function ApplicationForm() {
 
         <div className="apply-field">
           <label>Resume / CV</label>
-          <p style={{ color: 'grey', margin: '0.25rem 0' }}>Please limit your resume to a one-page PDF document. Documents of other formats will not be reviewed.</p>
+          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>Please limit your resume to a one-page PDF document. Documents of other formats will not be reviewed.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <label className="apply-btn-secondary" style={{ cursor: 'pointer', marginBottom: 0 }}>
               Choose File
@@ -650,14 +650,14 @@ export default function ApplicationForm() {
           const description = prompt.description ? promptDescriptionWithoutWordCount(prompt.description) : ''
           return (
             <div className="apply-field" key={prompt.id}>
-              <label>{prompt.prompt} <span style={{ color: 'grey', fontWeight: 400 }}>(150–200 words)</span></label>
-              {description && <p style={{ color: 'grey', margin: '0.25rem 0' }}>{description}</p>}
+              <label>{prompt.prompt} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(150–200 words)</span></label>
+              {description && <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>{description}</p>}
               <textarea
                 value={answers[key] ?? ''}
                 maxLength={1500}
                 onChange={e => setAnswers(prev => ({ ...prev, [key]: e.target.value }))}
               />
-              <p style={{ fontSize: '0.8rem', color: 'grey' }}>{(answers[key] ?? '').length} / 1,500 characters</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{(answers[key] ?? '').length} / 1,500 characters</p>
               {errors[key] && <p className="apply-warning">{errors[key]}</p>}
             </div>
           )
@@ -665,10 +665,10 @@ export default function ApplicationForm() {
 
         <div className="apply-field">
           <label>Please tell us about your commitments this semester.</label>
-          <p style={{ color: 'grey', margin: '0.25rem 0' }}>
+          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>
             What classes are you taking this semester? Please let us know any other organizations, employment, or commitments you are involved in this semester.
           </p>
-          <p style={{ color: 'grey', margin: '0.25rem 0' }}>(Example: CS61A: xx hours)</p>
+          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>(Example: CS61A: xx hours)</p>
           <textarea value={commitments} onChange={e => setCommitments(e.target.value)} />
           {errors.commitments && <p className="apply-warning">{errors.commitments}</p>}
         </div>
@@ -680,7 +680,7 @@ export default function ApplicationForm() {
           {submitError && <p className="apply-warning">{submitError}</p>}
         </div>
 
-        <p style={{ color: 'grey', fontSize: '0.85rem' }}>Copyright © 2026 PlexTech All Rights Reserved.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Copyright © 2026 Product Space All Rights Reserved.</p>
       </form>
     </div>
   )
