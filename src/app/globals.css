@@ -1,0 +1,288 @@
+@import "tailwindcss";
+
+/* ── PlexTech brand ── */
+:root {
+  --plex-orange: #ff833d;
+  --plex-coral:  #f06751;
+  --plex-pink:   #e04867;
+  --plex-purple: #a736ce;
+  --plex-from:   var(--plex-orange);
+  --plex-to:     var(--plex-purple);
+}
+
+/* ── Light theme (default) ── */
+:root {
+  --bg-base:        #fffaf6;
+  --bg-surface:     #ffffff;
+  --bg-raised:      #fff3ec;
+  --bg-active:      #ffe5d7;
+  --border:         #eadfd8;
+  --text-primary:   #241b2b;
+  --text-secondary: #514759;
+  --text-muted:     #7d7282;
+  --shadow-soft:    0 18px 55px rgba(89, 47, 76, 0.10);
+}
+
+html[data-theme="dark"] {
+  --bg-base:        #140f18;
+  --bg-surface:     #1d1623;
+  --bg-raised:      #2a1f31;
+  --bg-active:      #3b2a45;
+  --border:         #403247;
+  --text-primary:   #fff8f3;
+  --text-secondary: #e7dce9;
+  --text-muted:     #a99dac;
+  --shadow-soft:    0 18px 55px rgba(0, 0, 0, 0.26);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "DM Sans", var(--font-geist-sans), sans-serif;
+  background-image:
+    radial-gradient(circle at 8% 4%, rgba(255, 131, 61, 0.14), transparent 28rem),
+    radial-gradient(circle at 92% 12%, rgba(167, 54, 206, 0.10), transparent 30rem);
+  background-attachment: fixed;
+}
+
+.plex-gradient {
+  background: linear-gradient(120deg, var(--plex-orange), var(--plex-coral) 35%, var(--plex-pink) 68%, var(--plex-purple));
+  box-shadow: 0 8px 22px rgba(224, 72, 103, 0.22);
+}
+.plex-gradient:hover { opacity: 0.88; }
+
+.plex-gradient-text {
+  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 58%, var(--plex-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shared portal surfaces: keeps dashboard, grading and admin visually aligned. */
+.bg-\[var\(--bg-surface\)\] {
+  box-shadow: var(--shadow-soft);
+}
+
+/* Deliberation needs clearer working surfaces than the marketing-style portal.
+   Keep the brand warmth, but give the queue, controls, and detail panel enough
+   separation to make long review sessions easier on the eyes. */
+:root:not([data-theme="dark"]) .deliberation-portal {
+  --bg-base:        #efeae6;
+  --bg-surface:     #fcfaf8;
+  --bg-raised:      #e7ddd6;
+  --bg-active:      #dfd0c5;
+  --border:         #d3c3b9;
+  --text-primary:   #2d2527;
+  --text-secondary: #584b4d;
+  --text-muted:     #76686b;
+  --shadow-soft:    0 12px 32px rgba(75, 53, 45, 0.08);
+}
+
+:root:not([data-theme="dark"]) .deliberation-portal {
+  background-image:
+    radial-gradient(circle at 92% 0%, rgba(255, 131, 61, 0.10), transparent 28rem),
+    linear-gradient(145deg, #f4f0ec 0%, #ebe4de 100%);
+}
+
+button, a, input, textarea, select {
+  transition-duration: 180ms;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--plex-orange) !important;
+  box-shadow: 0 0 0 3px rgba(255, 131, 61, 0.14);
+}
+
+/* ── Applicant portal pages ─────────────────────────────── */
+
+.apply-page {
+  flex: 1;
+  font-family: "DM Sans", sans-serif;
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,250,246,0.92)),
+    url("/shapes-background.png");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.apply-home-card {
+  background-color: white;
+  border-radius: 28px;
+  padding: 36px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  width: 100%;
+  max-width: 600px;
+}
+
+.apply-form-card {
+  position: relative;
+  background-color: white;
+  border-radius: 28px;
+  padding: 40px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.apply-form-title {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.apply-page h1, .apply-page h2, .apply-page h3,
+.apply-page h4, .apply-page h5, .apply-page h6 {
+  color: black;
+  font-family: "DM Sans", sans-serif;
+}
+.apply-page h4 { color: grey; font-weight: 400; }
+.apply-page h6 { color: grey; font-weight: 400; }
+
+.apply-field {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.apply-field label {
+  font-weight: bold;
+  color: black;
+  margin-bottom: 0.5rem;
+  font-family: "DM Sans", sans-serif;
+}
+
+.apply-field input[type="text"],
+.apply-field input[type="email"],
+.apply-field select,
+.apply-field textarea {
+  padding: 0.65rem 0.5rem;
+  font-size: 1rem;
+  font-family: "DM Sans", sans-serif;
+  border: 1px solid #b7b7b7;
+  border-radius: 5px;
+  background-color: transparent;
+  color: black;
+  width: 100%;
+  max-width: 400px;
+  caret-color: #ff8a00;
+}
+
+.apply-field textarea {
+  max-width: 100%;
+  height: 8rem;
+  resize: vertical;
+}
+
+.apply-warning {
+  color: red;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.apply-btn-primary {
+  background-color: white;
+  color: white;
+  border: 0;
+  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 62%, var(--plex-purple));
+  border-radius: 12px;
+  padding: 0.5rem 1.25rem;
+  font-size: 1rem;
+  font-family: "DM Sans", sans-serif;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: background-color 0.2s, color 0.2s;
+}
+.apply-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(224,72,103,0.22); }
+.apply-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.apply-btn-secondary {
+  background-color: white;
+  color: var(--plex-coral);
+  border: 2px solid rgba(240, 103, 81, 0.55);
+  border-radius: 12px;
+  padding: 0.5rem 1.25rem;
+  font-size: 1rem;
+  font-family: "DM Sans", sans-serif;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  margin-left: 0.5rem;
+  transition: background-color 0.2s;
+}
+.apply-btn-secondary:hover {
+  color: white;
+  border-color: transparent;
+  background: linear-gradient(120deg, var(--plex-orange), var(--plex-pink) 62%, var(--plex-purple));
+  box-shadow: 0 8px 20px rgba(224,72,103,0.18);
+}
+
+/* Multi-select race dropdown */
+.apply-multiselect {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #b7b7b7;
+  border-radius: 5px;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 400px;
+  color: black;
+}
+
+.apply-chip {
+  background-color: #ffe8d0;
+  color: #ff8a00;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.apply-dropdown {
+  position: absolute;
+  z-index: 10;
+  background: white;
+  border: 1px solid #b7b7b7;
+  border-radius: 5px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.apply-dropdown-item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: black;
+}
+.apply-dropdown-item:hover { background-color: #fff3e8; }
+.apply-dropdown-item.selected { background-color: #ffe8d0; color: #ff8a00; font-weight: 500; }
+
+/* ── Slim scrollbars ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-active); }

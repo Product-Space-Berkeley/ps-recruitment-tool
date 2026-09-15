@@ -1,0 +1,48 @@
+{
+  "name": "delib-tool",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "next dev --port 5173",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:security": "node scripts/security-unit.mjs",
+    "test:assignments": "node scripts/grader-assignment-unit.mjs",
+    "test:grader-stats": "node scripts/grader-stats-unit.mjs",
+    "test:scoring": "node scripts/scoring-unit.mjs",
+    "test:coffee-chats": "node scripts/coffee-chat-unit.mjs",
+    "test:interview-import": "node scripts/interview-import-unit.mjs",
+    "test:behavioral": "node scripts/behavioral-unit.mjs",
+    "test:indexes": "node scripts/verify-indexes.mjs",
+    "db:security:preflight": "node scripts/migrate-security-indexes.mjs",
+    "db:security:apply": "node scripts/migrate-security-indexes.mjs --apply",
+    "test:race": "node scripts/race-toctou.mjs",
+    "test:load": "node scripts/loadtest.mjs",
+    "preopen:static": "npm run lint && npm run typecheck && npm run test:security && npm run build && npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@types/papaparse": "^5.5.2",
+    "mongoose": "^9.9.3",
+    "next": "16.3.1",
+    "next-auth": "^4.24.15",
+    "papaparse": "^5.5.3",
+    "pdf-lib": "1.17.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
