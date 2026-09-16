@@ -129,17 +129,7 @@ Fill in this inventory without including credentials:
 - Explain active recruitment cycles, deadlines, review assignments, import formats, and deliberation settings.
 - Reassign any unfinished grading owned by the outgoing maintainer.
 
-### 3. Transfer GitHub ownership and development access
-
-- Give the incoming maintainer repository access and have them clone it independently.
-- For long-term club ownership, transfer the repository to the club's GitHub organization through repository **Settings → General → Danger Zone → Transfer ownership**. Verify destination permissions and acceptance requirements first.
-- Confirm the successor can manage collaborators and repository settings, not merely read the code.
-- Update this README's clone URL and each checkout's remote after transfer.
-- Review deployment integrations, Actions secrets, webhooks, and any billing responsibility if used.
-
-See [GitHub's repository transfer instructions](https://docs.github.com/en/repositories/creating-and-managing-repositories/transferring-a-repository).
-
-### 4. Transfer Google Cloud and OAuth management
+### 3. Transfer Google Cloud and OAuth management
 
 - In the correct project's **IAM & Admin → IAM**, grant the successor the access needed to maintain OAuth clients and manage future maintainers, subject to the organization's policies.
 - Verify they can open the existing web client in **Google Auth Platform → Clients** and manage its configuration.
@@ -149,7 +139,7 @@ See [GitHub's repository transfer instructions](https://docs.github.com/en/repos
 
 See [Google Cloud access management](https://cloud.google.com/iam/docs/granting-changing-revoking-access) and [permission inheritance](https://docs.cloud.google.com/iam/docs/resource-hierarchy-access-control).
 
-### 5. Transfer MongoDB Atlas management
+### 4. Transfer MongoDB Atlas management
 
 - Invite the successor's own Atlas account to the project with **Project Owner** access so they can manage future access. Review organization ownership and billing responsibility separately if the outgoing person controls them.
 - Have the successor verify cluster access, Data Explorer access, database users, and the IP access list.
@@ -158,7 +148,7 @@ See [Google Cloud access management](https://cloud.google.com/iam/docs/granting-
 
 See [Atlas project access management](https://www.mongodb.com/docs/atlas/access/manage-project-access/).
 
-### 6. Transfer hosting, secrets, and integrations
+### 5. Transfer hosting, secrets, and integrations
 
 - If deployed, transfer hosting team membership, environment-variable access, deployment permissions, domain/DNS access, billing, and recovery contacts.
 - Transfer any Google Sheets used for coffee-chat or behavioral imports and verify their configured sources still work.
@@ -166,7 +156,7 @@ See [Atlas project access management](https://www.mongodb.com/docs/atlas/access/
 - Rotate secrets accessible to departing maintainers in a planned window. Test a replacement MongoDB credential and OAuth secret before revoking the old ones. Changing `NEXTAUTH_SECRET` invalidates existing sessions and requires users to sign in again.
 - The successor should retain the recovery instructions and required second-factor recovery access for club-owned accounts.
 
-### 7. Acceptance checklist, then remove outgoing access
+### 6. Acceptance checklist, then remove outgoing access
 
 - [ ] Successor can clone the repository and run `npm ci` and `npm run dev` on their own machine.
 - [ ] Google sign-in succeeds and their dashboard shows admin user management.
