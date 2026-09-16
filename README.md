@@ -6,12 +6,12 @@ Built with Next.js, React, TypeScript, NextAuth (Google sign-in), and MongoDB/Mo
 
 ## Quick start for a new maintainer
 
-1. Get repository access and the environment values from the current maintainer.
+1. Ask a Product Space Berkeley organization owner to add you to the GitHub organization and grant repository access. Get environment values from the current maintainer through the club's password manager or another secure channel.
 2. Install Node.js 20.19 or later (Node.js 22 is suitable).
 3. Clone the repository and install dependencies:
 
    ```sh
-   git clone https://github.com/ethannyang/ps-recruitment-tool.git
+   git clone https://github.com/Product-Space-Berkeley/ps-recruitment-tool.git
    cd ps-recruitment-tool
    npm ci
    ```
@@ -109,7 +109,7 @@ Fill in this inventory without including credentials:
 
 | Item | Current value / handoff note |
 | --- | --- |
-| Repository | https://github.com/ethannyang/ps-recruitment-tool — update after transfer |
+| Repository | https://github.com/Product-Space-Berkeley/ps-recruitment-tool |
 | Google Cloud project ID | Confirm in the Cloud Console project selector |
 | Google Cloud organization / folder | Confirm the actual parent resource and responsible administrator |
 | OAuth client name | Record the web client used by this environment |
@@ -129,7 +129,26 @@ Fill in this inventory without including credentials:
 - Explain active recruitment cycles, deadlines, review assignments, import formats, and deliberation settings.
 - Reassign any unfinished grading owned by the outgoing maintainer.
 
-### 3. Transfer Google Cloud and OAuth management
+### 3. Use the organization-owned GitHub repository
+
+- Add the incoming maintainer to the `Product-Space-Berkeley` GitHub organization with the least access needed for their role. Organization owners should manage membership and repository permissions.
+- Have the successor clone the organization repository:
+
+  ```sh
+  git clone https://github.com/Product-Space-Berkeley/ps-recruitment-tool.git
+  ```
+
+- Confirm the successor can open repository settings, manage collaborators, and access Actions/deployment settings when those responsibilities are part of the role.
+- Review deployment integrations, Actions secrets, webhooks, and billing responsibility if used. These settings may remain owned by the organization even when repository access is granted.
+- If an existing checkout still points to the old personal remote, update it:
+
+  ```sh
+  git remote set-url origin https://github.com/Product-Space-Berkeley/ps-recruitment-tool.git
+  ```
+
+- Keep the repository organization-owned after handoff; do not transfer it back to a personal account.
+
+### 4. Transfer Google Cloud and OAuth management
 
 - In the correct project's **IAM & Admin → IAM**, grant the successor the access needed to maintain OAuth clients and manage future maintainers, subject to the organization's policies.
 - Verify they can open the existing web client in **Google Auth Platform → Clients** and manage its configuration.
@@ -139,7 +158,7 @@ Fill in this inventory without including credentials:
 
 See [Google Cloud access management](https://cloud.google.com/iam/docs/granting-changing-revoking-access) and [permission inheritance](https://docs.cloud.google.com/iam/docs/resource-hierarchy-access-control).
 
-### 4. Transfer MongoDB Atlas management
+### 5. Transfer MongoDB Atlas management
 
 - Invite the successor's own Atlas account to the project with **Project Owner** access so they can manage future access. Review organization ownership and billing responsibility separately if the outgoing person controls them.
 - Have the successor verify cluster access, Data Explorer access, database users, and the IP access list.
@@ -148,7 +167,7 @@ See [Google Cloud access management](https://cloud.google.com/iam/docs/granting-
 
 See [Atlas project access management](https://www.mongodb.com/docs/atlas/access/manage-project-access/).
 
-### 5. Transfer hosting, secrets, and integrations
+### 6. Transfer hosting, secrets, and integrations
 
 - If deployed, transfer hosting team membership, environment-variable access, deployment permissions, domain/DNS access, billing, and recovery contacts.
 - Transfer any Google Sheets used for coffee-chat or behavioral imports and verify their configured sources still work.
@@ -156,17 +175,18 @@ See [Atlas project access management](https://www.mongodb.com/docs/atlas/access/
 - Rotate secrets accessible to departing maintainers in a planned window. Test a replacement MongoDB credential and OAuth secret before revoking the old ones. Changing `NEXTAUTH_SECRET` invalidates existing sessions and requires users to sign in again.
 - The successor should retain the recovery instructions and required second-factor recovery access for club-owned accounts.
 
-### 6. Acceptance checklist, then remove outgoing access
+### 7. Acceptance checklist, then remove outgoing access
 
 - [ ] Successor can clone the repository and run `npm ci` and `npm run dev` on their own machine.
 - [ ] Google sign-in succeeds and their dashboard shows admin user management.
 - [ ] Application connects to the intended MongoDB database.
-- [ ] Successor can manage access in GitHub, Google Cloud, Atlas, and hosting if applicable.
+- [ ] Successor is a member of the `Product-Space-Berkeley` GitHub organization and can manage the repository settings required by their role.
+- [ ] Successor can manage access in Google Cloud, Atlas, and hosting if applicable.
 - [ ] A controlled test account can be added, sign in with its intended role, and be removed.
 - [ ] Active recruitment work, integrations, and recovery instructions have been reviewed.
 - [ ] Required secrets are available to the successor and rotations have been tested.
 - [ ] Another verified admin removes the outgoing maintainer's application access.
-- [ ] Outgoing GitHub, Cloud IAM, Atlas, hosting, secret-vault, and integration access is removed as appropriate. Check inherited team/organization access too.
+- [ ] Outgoing GitHub organization/team membership, Cloud IAM, Atlas, hosting, secret-vault, and integration access is removed as appropriate. Check inherited team/organization access too.
 
 Do not delete the repository, OAuth client, Atlas cluster, or database as part of removing a person's access.
 
