@@ -1,14 +1,19 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn, useSession } from 'next-auth/react'
+import { getProviders, signIn, useSession } from 'next-auth/react'
 import ThemeToggle from '@/components/ThemeToggle'
 import Image from 'next/image'
 
 export default function Home() {
   const router = useRouter()
   const { data: session, status } = useSession()
+  const [devLogin, setDevLogin] = useState(false)
+
+  useEffect(() => {
+    getProviders().then(providers => setDevLogin(Boolean(providers?.['dev-login']))).catch(() => setDevLogin(false))
+  }, [])
 
   useEffect(() => {
     const role = (session?.user as { role?: string } | undefined)?.role
@@ -50,6 +55,19 @@ export default function Home() {
             <GoogleIcon />
             Sign in with Google
           </button>
+          {devLogin && (
+            <div className="space-y-2">
+              <button
+                onClick={() => signIn('dev-login', { callbackUrl: '/dashboard' })}
+                className="w-full border border-[var(--border)] text-[var(--text-primary)] font-bold py-3 rounded-xl"
+              >
+                Dev login (admin)
+              </button>
+              <p className="text-xs text-center text-[var(--text-muted)]">
+                Local testing only. Changes are saved to your configured database.
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-[var(--text-muted)] mt-4">

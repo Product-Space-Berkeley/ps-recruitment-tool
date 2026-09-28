@@ -210,3 +210,22 @@ Do not delete the repository, OAuth client, Atlas cluster, or database as part o
 | Not authorized to create a collection on `local` | Create `authorizedusers` in `ps_recruitment` instead |
 | Cannot remove your own admin account | Ask the incoming verified admin to remove it after handoff |
 | New environment values are not taking effect | Restart the development server or redeploy the hosted application |
+# Local development without Google sign-in
+
+For developers testing staff/admin features, add `DEV_LOGIN=1` to `.env.local`
+and set `NEXTAUTH_URL=http://localhost:5173`. Keep a generated `NEXTAUTH_SECRET`
+and your own `MONGODB_URI` pointing to `ps_recruitment_dev`. Google credentials
+and an `authorizedusers` entry are not required for this development login.
+MongoDB database permissions and your IP access-list entry are still required.
+
+Start the server with `npm run dev -- --hostname 127.0.0.1`, open
+http://localhost:5173, and click **Dev login (admin)**. This creates a normal
+signed session for `dev-admin@example.test` with admin access. All developers
+using this shortcut share that test identity; use Google sign-in when testing
+distinct reviewers or applicant email verification. Changes affect the configured
+database, so use test data and do not point this mode at the live database.
+
+Keep this server local; do not expose it through a tunnel or shared deployment.
+The shortcut requires `NODE_ENV=development`, `DEV_LOGIN=1`, and a loopback
+`NEXTAUTH_URL`. It is unavailable in production even if the flag is set.
+To disable it, remove the flag and restart; existing dev sessions lose access.
