@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, canAccessAdmin, CurrentUser } from '@/lib/auth'
 import { RecruitmentCycle, Round, EssayPrompt, Applicant, RoundStatus } from '@/lib/types'
+import { MAX_PROMPTS, MAX_WORD_LIMIT, MIN_PROMPTS } from '@/lib/applicationFields'
 import { evaluateResults } from '@/lib/scoring'
 import { buildGraderAssignments } from '@/lib/graderAssignments'
 import BehavioralSyncPanel from '@/components/BehavioralSyncPanel'
@@ -84,11 +85,7 @@ export default function AdminPage() {
   const [cycleLoading, setCycleLoading] = useState(false)
 
   // Essay prompts
-  const [prompts, setPrompts] = useState<EssayPrompt[]>([
-    { id: '', cycle_id: '', question_number: 1, prompt: '', description: null, criterion1: null, criterion2: null },
-    { id: '', cycle_id: '', question_number: 2, prompt: '', description: null, criterion1: null, criterion2: null },
-    { id: '', cycle_id: '', question_number: 3, prompt: '', description: null, criterion1: null, criterion2: null },
-  ])
+  const [prompts, setPrompts] = useState<EssayPrompt[]>([blankPrompt('', 1)])
   const [promptSaving, setPromptSaving] = useState(false)
   const [promptMessage, setPromptMessage] = useState('')
 
@@ -266,11 +263,7 @@ export default function AdminPage() {
   // ── prompts ──────────────────────────────────────────────
   const loadPrompts = useCallback(async (cycleId: string) => {
     const existing: EssayPrompt[] = await fetch(`/api/cycles/${cycleId}/prompts`).then(r => r.json())
-    const filled = [1, 2, 3].map(n => {
-      const found = existing.find(p => p.question_number === n)
-      return found ?? { id: '', cycle_id: cycleId, question_number: n, prompt: '', description: null, criterion1: null, criterion2: null }
-    })
-    setPrompts(filled)
+    setPrompts(Array.isArray(existing) && existing.length ? existing : [blankPrompt(cycleId, 1)])
   }, [])
 
   useEffect(() => {
@@ -347,22 +340,28 @@ export default function AdminPage() {
     if (!selectedCycle) return
     setPromptSaving(true)
     setPromptMessage('')
-    await fetch(`/api/cycles/${selectedCycle.id}/prompts`, {
+    const res = await fetch(`/api/cycles/${selectedCycle.id}/prompts`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(prompts.map(p => ({
+      body: JSON.stringify(prompts.map((p, i) => ({
         ...(p.id ? { id: p.id } : {}),
         cycle_id: selectedCycle.id,
-        question_number: p.question_number,
+        question_number: i + 1,
         prompt: p.prompt,
         description: p.description,
+        word_limit: p.word_limit,
         criterion1: p.criterion1,
         criterion2: p.criterion2,
       }))),
     })
+    setPromptSaving(false)
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setPromptMessage(`Error: ${err?.error ?? res.statusText}`)
+      return
+    }
     await loadPrompts(selectedCycle.id)
     setPromptMessage('Saved.')
-    setPromptSaving(false)
   }
 
   // ── rounds ───────────────────────────────────────────────
@@ -400,17 +399,17 @@ export default function AdminPage() {
     if (selectedRound?.id === round.id) setSelectedRound(updated)
   }
 
-  // Destructively rebuild a rubric round's deliberation sessions: wipe all existing
+  // Destructively rebuild a rubric round's deliberation session: wipe all existing
   // sessions for the round (and their votes/notes) then re-run startDeliberation to
-  // produce fresh Curriculum + Developer sessions split by applicant.desired_roles.
-  async function resplitRoundByRole() {
+  // produce a fresh session from the current scores.
+  async function rebuildRoundSessions() {
     if (!selectedRound) return
     if (selectedRound.grading_type !== 'rubric') return
     const sessionCount = roundSessions.length
     if (!confirm(
-      `Re-split this round into Curriculum + Developer sessions?\n\n` +
+      `Rebuild this round's deliberation session?\n\n` +
       `This will DELETE the existing ${sessionCount} session${sessionCount !== 1 ? 's' : ''} ` +
-      `and ALL of their votes and notes, then create fresh sessions split by applicant role.\n\n` +
+      `and ALL of their votes and notes, then create a fresh session from the current scores.\n\n` +
       `This cannot be undone. Continue?`
     )) return
 
@@ -424,7 +423,7 @@ export default function AdminPage() {
       }
       setRoundSessions([])
       await startDeliberation()
-      // Re-fetch sessions so the new role-tagged ones appear in the UI
+      // Re-fetch sessions so the new one appears in the UI
       const data = await fetch(`/api/sessions?round_id=${selectedRound.id}`).then(r => r.json()).catch(() => [])
       if (Array.isArray(data)) setRoundSessions(data)
     } catch (err: unknown) {
@@ -549,7 +548,12 @@ export default function AdminPage() {
       }),
     })
     if (!roundRes.ok) {
-      setStartGradingMessage('Failed to create round.')
+      const err = await roundRes.json().catch(() => null)
+      setStartGradingMessage(
+        roundRes.status === 409
+          ? 'Error: This cycle already has a round in the first position, so the Application Review round can\'t be created. Delete that round under Rounds below, then try again.'
+          : `Error: Couldn't create the Application Review round: ${err?.error ?? roundRes.statusText}`,
+      )
       setStartGradingLoading(false)
       return
     }
@@ -758,40 +762,31 @@ export default function AdminPage() {
     if (!data) return
     const counts: Record<string, number> = {
       total: data.length,
-      developer: 0,
-      curriculum: 0,
       freshman: 0,
       sophomore: 0,
       junior: 0,
       senior: 0,
-      male: 0,
-      female: 0,
-      other: 0,
+      transfer: 0,
+      previouslyApplied: 0,
     }
     // Legacy applicants stored a graduation year instead of a class-year label
     const legacyYearMap: Record<string, string> = { [String(new Date().getFullYear())]: 'senior', [String(new Date().getFullYear()+1)]: 'junior', [String(new Date().getFullYear()+2)]: 'sophomore', [String(new Date().getFullYear()+3)]: 'freshman' }
     for (const app of data) {
-      // Keep this aligned with scoring and deliberation: only the exact
-      // Industry Developer value is treated as developer; legacy values use
-      // the curriculum path.
-      if (app.desired_roles === 'Industry Developer') counts.developer++
-      else counts.curriculum++
-
       const raw = app.year ?? ''
-      const yr = ['Freshman', 'Sophomore', 'Junior', 'Senior'].includes(raw)
-        ? raw.toLowerCase()
+      // "Junior (transfer)" and "Junior (non-transfer)" both count as juniors.
+      const label = raw.split(' (')[0]
+      const yr = ['Freshman', 'Sophomore', 'Junior', 'Senior'].includes(label)
+        ? label.toLowerCase()
         : legacyYearMap[raw]
       if (yr) counts[yr]++
-      const g = (app.gender ?? '').toLowerCase()
-      if (g === 'male') counts.male++
-      else if (g === 'female') counts.female++
-      else counts.other++
+      if (app.transfer || raw === 'Junior (transfer)') counts.transfer++
+      if (app.previously_applied) counts.previouslyApplied++
     }
     setAnalytics(counts)
   }
 
   // ── start deliberation ───────────────────────────────────
-  // Creates two sessions for the rubric round — one per applicant role (curriculum, developer).
+  // Creates the rubric round's deliberation session, ranked by computed score.
   async function startDeliberation() {
     if (!selectedRound || !selectedCycle || !currentUser) return
     setDelibLoading(true)
@@ -808,80 +803,55 @@ export default function AdminPage() {
       const evaluated = evaluateResults(reviewsData, appsData as Applicant[])
       if (!evaluated.length) throw new Error('Could not compute scores. Check that reviews exist.')
 
-      const roleSplits: { role: 'curriculum' | 'developer'; label: string; match: (dr: string | null) => boolean }[] = [
-        { role: 'curriculum', label: 'Curriculum', match: dr => dr !== 'Industry Developer' },
-        { role: 'developer',  label: 'Developer',  match: dr => dr === 'Industry Developer' },
-      ]
-
-      const createdIds: string[] = []
-      const skipped: string[] = []
-
-      // Roles that already have an active session are skipped, not fatal —
-      // this lets Start Deliberation be re-run to fill in a missing track.
-      const existingSessions: { role: string | null; status: string }[] =
+      // Only one active deliberation session may exist per round.
+      const existingSessions: { status: string }[] =
         await fetch(`/api/sessions?round_id=${selectedRound.id}`).then(r => r.ok ? r.json() : []).catch(() => [])
-      const rolesWithSession = new Set(
-        existingSessions.filter(s => s.status === 'active').map(s => s.role)
-      )
-
-      for (const split of roleSplits) {
-        if (rolesWithSession.has(split.role)) { skipped.push(`${split.label} (already exists)`); continue }
-        const filtered = evaluated.filter(ev => split.match(ev.desired_roles))
-        if (!filtered.length) { skipped.push(`${split.label} (no graded applicants)`); continue }
-
-        const sessionId = Math.random().toString(36).substring(2, 8).toUpperCase()
-        const sessionName = `${selectedCycle.name} — ${selectedRound.name} (${split.label})`
-
-        const sessionRes = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: sessionId,
-            round_id: selectedRound.id,
-            name: sessionName,
-            status: 'active',
-            created_by: currentUser.email,
-            anonymous: false,
-            role: split.role,
-          }),
-        })
-        if (!sessionRes.ok) {
-          const err = await sessionRes.json().catch(() => ({}))
-          throw new Error(err.error ?? `Failed to create ${split.label} session.`)
-        }
-
-        await fetch('/api/session-members', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, user_email: currentUser.email }),
-        })
-
-        const candidates = filtered.map((ev, idx) => ({
-          session_id: sessionId,
-          applicant_id: ev.applicant_id,
-          name: `${ev.first_name} ${ev.last_name}`,
-          status: 'pending',
-          data: {
-            score: ev.total,
-            candidate_number: idx + 1,
-            desired_roles: ev.desired_roles,
-            r0: ev.r0, r1: ev.r1, r2: ev.r2, r3: ev.r3, r4: ev.r4,
-            r5: ev.r5, r6: ev.r6, r7: ev.r7, r8: ev.r8, r9: ev.r9,
-          },
-        }))
-
-        await fetch(`/api/sessions/${sessionId}/candidates`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(candidates),
-        })
-
-        createdIds.push(`${split.label}: ${sessionId}`)
+      if (existingSessions.some(s => s.status === 'active')) {
+        throw new Error('This round already has an active deliberation session.')
       }
 
-      if (!createdIds.length) {
-        throw new Error(`No sessions created. ${skipped.length ? 'Skipped: ' + skipped.join(', ') : 'No applicants matched curriculum or developer roles.'}`)
+      const sessionId = Math.random().toString(36).substring(2, 8).toUpperCase()
+      const sessionRes = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: sessionId,
+          round_id: selectedRound.id,
+          name: `${selectedCycle.name} — ${selectedRound.name}`,
+          status: 'active',
+          created_by: currentUser.email,
+          anonymous: false,
+        }),
+      })
+      if (!sessionRes.ok) {
+        const err = await sessionRes.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Failed to create the deliberation session.')
       }
+
+      await fetch('/api/session-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, user_email: currentUser.email }),
+      })
+
+      const candidates = evaluated.map((ev, idx) => ({
+        session_id: sessionId,
+        applicant_id: ev.applicant_id,
+        name: `${ev.first_name} ${ev.last_name}`,
+        status: 'pending',
+        data: {
+          score: ev.total,
+          candidate_number: idx + 1,
+          r0: ev.r0, r1: ev.r1, r2: ev.r2, r3: ev.r3, r4: ev.r4,
+          r5: ev.r5, r6: ev.r6, r7: ev.r7, r8: ev.r8, r9: ev.r9,
+        },
+      }))
+
+      await fetch(`/api/sessions/${sessionId}/candidates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(candidates),
+      })
 
       await updateRoundStatus(selectedRound, 'deliberating')
 
@@ -889,10 +859,7 @@ export default function AdminPage() {
       const refreshed = await fetch(`/api/sessions?round_id=${selectedRound.id}`).then(r => r.ok ? r.json() : []).catch(() => [])
       if (Array.isArray(refreshed)) setRoundSessions(refreshed)
 
-      setDelibMessage(
-        `Sessions created — ${createdIds.join(', ')}` +
-        (skipped.length ? ` · Skipped: ${skipped.join(', ')}` : '')
-      )
+      setDelibMessage(`Session created — ${sessionId}`)
     } catch (err: unknown) {
       setDelibMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -1067,7 +1034,7 @@ export default function AdminPage() {
                             {startGradingLoading ? 'Starting...' : '▶ Start Grading'}
                           </button>
                           {startGradingMessage && (
-                            <p className={`text-sm ${startGradingMessage.includes('failed') ? 'text-red-400' : 'text-green-400'}`}>
+                            <p className={`text-sm ${/failed|^Error/i.test(startGradingMessage) ? 'text-red-400' : 'text-green-400'}`}>
                               {startGradingMessage}
                             </p>
                           )}
@@ -1096,15 +1063,12 @@ export default function AdminPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Total', value: analytics.total },
-                    { label: 'Industry Developers', value: `${analytics.developer} (${pct(analytics.developer)})` },
-                    { label: 'Curriculum', value: `${analytics.curriculum} (${pct(analytics.curriculum)})` },
                     { label: 'Freshman', value: `${analytics.freshman} (${pct(analytics.freshman)})` },
                     { label: 'Sophomore', value: `${analytics.sophomore} (${pct(analytics.sophomore)})` },
                     { label: 'Junior', value: `${analytics.junior} (${pct(analytics.junior)})` },
                     { label: 'Senior', value: `${analytics.senior} (${pct(analytics.senior)})` },
-                    { label: 'Male', value: `${analytics.male} (${pct(analytics.male)})` },
-                    { label: 'Female', value: `${analytics.female} (${pct(analytics.female)})` },
-                    { label: 'Other Gender', value: `${analytics.other} (${pct(analytics.other)})` },
+                    { label: 'Transfer', value: `${analytics.transfer} (${pct(analytics.transfer)})` },
+                    { label: 'Applied Before', value: `${analytics.previouslyApplied} (${pct(analytics.previouslyApplied)})` },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-[var(--bg-raised)] rounded-lg p-3">
                       <p className="text-xs text-[var(--text-muted)]">{label}</p>
@@ -1117,42 +1081,79 @@ export default function AdminPage() {
 
             {/* Essay prompts */}
             <Section title="Essay Prompts">
+              <p className="text-xs text-[var(--text-muted)]">
+                {MIN_PROMPTS}–{MAX_PROMPTS} questions, each with its own word limit and two grading criteria.
+                Prompts can only be edited while applications are closed and before anyone has applied.
+              </p>
               <div className="space-y-4">
-                {prompts.map((p, i) => (
-                  <div key={i} className="space-y-1.5 pb-3 border-b border-[var(--border)] last:border-0">
-                    <p className="text-xs font-medium text-[var(--text-muted)]">Question {p.question_number}</p>
-                    <input
-                      type="text"
-                      value={p.prompt}
-                      onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, prompt: e.target.value } : x))}
-                      placeholder="Question text..."
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
-                    />
-                    <input
-                      type="text"
-                      value={p.description ?? ''}
-                      onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
-                      placeholder="Description / clarification (optional)..."
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
-                    />
-                    <input
-                      type="text"
-                      value={p.criterion1 ?? ''}
-                      onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, criterion1: e.target.value } : x))}
-                      placeholder="Grading criterion 1 (e.g. To what degree does the applicant demonstrate passion?)"
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
-                    />
-                    <input
-                      type="text"
-                      value={p.criterion2 ?? ''}
-                      onChange={e => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, criterion2: e.target.value } : x))}
-                      placeholder="Grading criterion 2 (e.g. To what extent does the applicant exhibit knowledge?)"
-                      className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
-                    />
-                  </div>
-                ))}
+                {prompts.map((p, i) => {
+                  const update = (patch: Partial<EssayPrompt>) => setPrompts(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
+                  return (
+                    <div key={i} className="space-y-1.5 pb-3 border-b border-[var(--border)] last:border-0">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-[var(--text-muted)]">Question {i + 1}</p>
+                        {prompts.length > MIN_PROMPTS && (
+                          <button
+                            onClick={() => setPrompts(prev => prev.filter((_, j) => j !== i))}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={p.prompt}
+                        onChange={e => update({ prompt: e.target.value })}
+                        placeholder="Question text..."
+                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
+                      />
+                      <input
+                        type="text"
+                        value={p.description ?? ''}
+                        onChange={e => update({ description: e.target.value })}
+                        placeholder="Description / clarification (optional)..."
+                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
+                      />
+                      <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                        Word limit
+                        <input
+                          type="number"
+                          min={1}
+                          max={MAX_WORD_LIMIT}
+                          value={p.word_limit ?? ''}
+                          onChange={e => update({ word_limit: e.target.value ? Number(e.target.value) : null })}
+                          placeholder="e.g. 250"
+                          className="w-28 bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={p.criterion1 ?? ''}
+                        onChange={e => update({ criterion1: e.target.value })}
+                        placeholder="Grading criterion 1 (e.g. To what degree does the applicant demonstrate passion?)"
+                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
+                      />
+                      <input
+                        type="text"
+                        value={p.criterion2 ?? ''}
+                        onChange={e => update({ criterion2: e.target.value })}
+                        placeholder="Grading criterion 2 (e.g. To what extent does the applicant exhibit knowledge?)"
+                        className="w-full bg-[var(--bg-raised)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--ps-accent)]"
+                      />
+                    </div>
+                  )
+                })}
               </div>
               <div className="flex items-center gap-3">
+                {prompts.length < MAX_PROMPTS && (
+                  <button
+                    onClick={() => setPrompts(prev => [...prev, blankPrompt(selectedCycle.id, prev.length + 1)])}
+                    className="text-sm px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-primary)] hover:border-[var(--ps-accent)]/40"
+                  >
+                    + Add Question
+                  </button>
+                )}
                 <button
                   onClick={savePrompts}
                   disabled={promptSaving}
@@ -1160,7 +1161,9 @@ export default function AdminPage() {
                 >
                   {promptSaving ? 'Saving...' : 'Save Prompts'}
                 </button>
-                {promptMessage && <p className="text-green-400 text-sm">{promptMessage}</p>}
+                {promptMessage && (
+                  <p className={`text-sm ${promptMessage.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{promptMessage}</p>
+                )}
               </div>
             </Section>
 
@@ -1255,9 +1258,9 @@ export default function AdminPage() {
                   })}
                   {selectedRound.grading_type === 'rubric' && roundSessions.length > 0 && (
                     <button
-                      onClick={resplitRoundByRole}
+                      onClick={rebuildRoundSessions}
                       className="text-xs px-3 py-1.5 rounded-lg border font-medium bg-red-500/10 border-red-500/40 text-red-300 hover:bg-red-500/20 transition-colors"
-                      title="Delete the current session(s) and re-create them as separate Curriculum + Developer deliberations based on each applicant's selected role. All votes and notes in the current sessions are lost."
+                      title="Delete the current session(s) and re-create the deliberation from the current scores. All votes and notes in the current sessions are lost."
                     >
                       Rebuild Sessions ⟳
                     </button>
@@ -1719,4 +1722,8 @@ export default function AdminPage() {
       </div>
     </main>
   )
+}
+
+function blankPrompt(cycleId: string, questionNumber: number): EssayPrompt {
+  return { id: '', cycle_id: cycleId, question_number: questionNumber, prompt: '', description: null, word_limit: null, criterion1: null, criterion2: null }
 }

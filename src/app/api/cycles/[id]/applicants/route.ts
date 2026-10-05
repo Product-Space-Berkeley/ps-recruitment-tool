@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   await connectDB()
   const { id } = await params
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid cycle id.' }, { status: 400 })
-  const applicants = await Applicant.find({ cycle_id: id }, { resume_base64: 0 }).sort({ created_at: 1 }).lean()
+  const applicants = await Applicant.find({ cycle_id: id }, { resume_base64: 0, photo_base64: 0 }).sort({ created_at: 1 }).lean()
   return NextResponse.json(
     applicants.map(a => ({ ...a, id: a._id.toString(), cycle_id: a.cycle_id.toString(), _id: undefined })),
     { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },

@@ -145,6 +145,29 @@ img[src*="product-space-logo"] { object-fit: contain; }
   resize: vertical;
 }
 
+.apply-field .apply-hint {
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.apply-field label.apply-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-weight: 400;
+  margin-bottom: 0.4rem;
+  cursor: pointer;
+}
+
+.apply-choice input { margin-top: 0.3rem; accent-color: var(--ps-accent); }
+
+.apply-section-title {
+  margin: 2.5rem 0 0.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
 .apply-warning {
   color: red;
   font-size: 0.85rem;

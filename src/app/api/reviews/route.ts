@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import mongoose from 'mongoose'
 import { connectDB } from '@/lib/mongodb'
-import { Review, GraderAssignment, Round } from '@/lib/models'
+import { Review, GraderAssignment, Round, EssayResponse } from '@/lib/models'
+import { ESSAY_REVIEW_SLOTS } from '@/lib/reviewSlots'
 import { requireRole } from '@/lib/serverAuth'
 import { isEmail, isObjectId, readJsonObject } from '@/lib/apiValidation'
 import { consumeUserRateLimit } from '@/lib/rateLimit'
@@ -84,23 +85,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'round_id and applicant_id are required.' }, { status: 400 })
   }
 
-  const ratings = Array.from({ length: 10 }, (_, i) => body[`r${i}`])
+  // Essay slots for questions this applicant didn't answer (cycles with fewer
+  // than three prompts) must be left empty and are stored as null.
+  const essayCount = await EssayResponse.countDocuments({ applicant_id: body.applicant_id })
+  const unusedSlots = ESSAY_REVIEW_SLOTS.slice(Math.max(1, essayCount))
+  const unusedRatings = new Set<string>(unusedSlots.flatMap(slot => slot.rKeys))
+  const unusedComments = new Set<string>(unusedSlots.map(slot => slot.commentKey))
+
+  const ratings = Array.from({ length: 10 }, (_, i) => body[`r${i}`] ?? null)
   const validRatings = ratings.every((rating, i) => (
-    typeof rating === 'number'
-    && Number.isInteger(rating)
-    && rating >= 1
-    && rating <= (i === 0 ? 3 : 4)
+    unusedRatings.has(`r${i}`)
+      ? rating === null
+      : typeof rating === 'number'
+        && Number.isInteger(rating)
+        && rating >= 1
+        && rating <= (i === 0 ? 3 : 4)
   ))
   if (!validRatings) {
     return NextResponse.json({ error: 'All ratings must be valid rubric scores.' }, { status: 400 })
   }
 
-  const rawComments = Array.from({ length: 5 }, (_, i) => body[`comment${i}`])
-  if (rawComments.some(comment => typeof comment !== 'string')) {
-    return NextResponse.json({ error: 'All comments must be text.' }, { status: 400 })
-  }
-  const comments = rawComments.map(comment => (comment as string).trim())
-  if (comments.some(comment => comment.length === 0 || comment.length > 2000)) {
+  const rawComments = Array.from({ length: 5 }, (_, i) => body[`comment${i}`] ?? null)
+  const comments = rawComments.map((comment, i) => (
+    unusedComments.has(`comment${i}`) ? comment : typeof comment === 'string' ? comment.trim() : undefined
+  ))
+  const validComments = comments.every((comment, i) => (
+    unusedComments.has(`comment${i}`)
+      ? comment === null
+      : typeof comment === 'string' && comment.length > 0 && comment.length <= 2000
+  ))
+  if (!validComments) {
     return NextResponse.json({ error: 'All comments are required and must be 2,000 characters or fewer.' }, { status: 400 })
   }
 

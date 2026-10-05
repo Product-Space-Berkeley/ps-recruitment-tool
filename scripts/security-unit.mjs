@@ -71,6 +71,11 @@ async function main() {
     join(process.cwd(), 'src/app/api/applicants/[id]/resume/route.ts'),
     'utf8',
   )
+  const applicantAccessSource = await readFile(join(process.cwd(), 'src/lib/applicantAccess.ts'), 'utf8')
+  const applicantMaterialRouteSources = await Promise.all(['resume', 'essays', 'photo'].map(route => readFile(
+    join(process.cwd(), `src/app/api/applicants/[id]/${route}/route.ts`),
+    'utf8',
+  )))
   const voteResetRouteSource = await readFile(
     join(process.cwd(), 'src/app/api/votes/reset/route.ts'),
     'utf8',
@@ -167,10 +172,17 @@ async function main() {
       'bulk candidate status updates must reject cross-session candidate IDs atomically',
     )
     assert.match(
-      resumeRouteSource,
+      applicantAccessSource,
       /SessionMember\.exists/,
-      'deliberation resume access must require membership for regular graders',
+      'deliberation applicant access must require membership for regular graders',
     )
+    for (const source of applicantMaterialRouteSources) {
+      assert.match(
+        source,
+        /if \(!await canReadApplicant\(auth, id\)\) return NextResponse\.json\(\{ error: 'Forbidden' \}, \{ status: 403 \}\)/,
+        'resume, essay and photo routes must check applicant access',
+      )
+    }
     assert.match(
       resumeRouteSource,
       /Content-Disposition': 'inline; filename="resume\.pdf"'/,
