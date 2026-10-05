@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getProviders, signIn, useSession } from 'next-auth/react'
+import { getProviders, signIn, signOut, useSession } from 'next-auth/react'
+import Link from 'next/link'
 import ThemeToggle from '@/components/ThemeToggle'
 import Image from 'next/image'
 
@@ -15,10 +16,21 @@ export default function Home() {
     getProviders().then(providers => setDevLogin(Boolean(providers?.['dev-login']))).catch(() => setDevLogin(false))
   }, [])
 
+  const role = (session?.user as { role?: string } | undefined)?.role
+  const isMember = role === 'grader' || role === 'leadership' || role === 'admin'
+  // Any verified Google account can sign in (applicants need it to apply), so a
+  // non-member ends up here with a session but no role. Say so instead of
+  // silently showing the sign-in button again.
+  const unauthorizedEmail = status === 'authenticated' && !isMember ? session?.user?.email ?? null : null
+
   useEffect(() => {
-    const role = (session?.user as { role?: string } | undefined)?.role
-    if (role === 'grader' || role === 'leadership' || role === 'admin') router.replace('/dashboard')
-  }, [session, router])
+    if (isMember) router.replace('/dashboard')
+  }, [isMember, router])
+
+  async function switchAccount() {
+    await signOut({ redirect: false })
+    await signIn('google', { callbackUrl: '/dashboard' }, { prompt: 'select_account' })
+  }
 
   if (status === 'loading') {
     return (
@@ -44,16 +56,30 @@ export default function Home() {
         </div>
 
         <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-[28px] p-8 space-y-5">
-          <p className="text-sm text-[var(--text-muted)] text-center">
-            Welcome to Product Space. Sign in to review applications and shape our next cohort.
-          </p>
+          {unauthorizedEmail ? (
+            <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm space-y-2">
+              <p className="font-semibold text-[var(--text-primary)]">This account doesn&apos;t have access</p>
+              <p className="text-[var(--text-muted)]">
+                You&apos;re signed in as <strong className="text-[var(--text-primary)] break-all">{unauthorizedEmail}</strong>,
+                which isn&apos;t on the Product Space member list. If you&apos;re a member, ask an admin to add this exact
+                email, or sign in with the account they added.
+              </p>
+              <p className="text-[var(--text-muted)]">
+                Applying to Product Space? <Link href="/apply" className="underline text-[var(--text-primary)]">Go to the application</Link>.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)] text-center">
+              Welcome to Product Space. Sign in to review applications and shape our next cohort.
+            </p>
+          )}
 
           <button
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={unauthorizedEmail ? switchAccount : () => signIn('google', { callbackUrl: '/dashboard' })}
             className="w-full flex items-center justify-center gap-3 ps-gradient text-white font-bold py-3 rounded-xl transition-all hover:-translate-y-0.5"
           >
             <GoogleIcon />
-            Sign in with Google
+            {unauthorizedEmail ? 'Sign in with a different account' : 'Sign in with Google'}
           </button>
           {devLogin && (
             <div className="space-y-2">

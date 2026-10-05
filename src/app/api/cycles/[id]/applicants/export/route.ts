@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid cycle id.' }, { status: 400 })
 
   // All applicants for this cycle (resume excluded — binary, not CSV-able).
-  const applicants = await Applicant.find({ cycle_id: id }, { resume_base64: 0 }).sort({ created_at: 1 }).lean()
+  const applicants = await Applicant.find({ cycle_id: id }, { resume_base64: 0, photo_base64: 0 }).sort({ created_at: 1 }).lean()
   const applicantIds = applicants.map(a => a._id)
 
   // Essay prompts for this cycle define the essay columns (stable order).
@@ -38,11 +38,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     essayByApplicant.get(aid)!.set(q, r.response ?? '')
   }
 
+  const yesNo = (value: unknown) => value === true ? 'Yes' : value === false ? 'No' : ''
   const headers = [
-    'first_name', 'last_name', 'email', 'phone', 'desired_role',
-    'year', 'transfer', 'major', 'gender', 'race',
-    'linkedin', 'website', 'time_commitment', 'submitted_at',
+    'first_name', 'last_name', 'email', 'phone', 'year', 'major', 'previously_applied',
+    'time_commitment', 'meeting_availability', 'retreat_availability',
     ...questionNumbers.map(n => `essay_q${n}`),
+    'additional_context', 'race', 'ethnicity', 'transfer', 'submitted_at',
   ]
 
   const rows = applicants.map(a => {
@@ -52,17 +53,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       a.last_name ?? '',
       a.email ?? '',
       a.phone ?? '',
-      a.desired_roles ?? '',
       a.year ?? '',
-      a.transfer ? 'Yes' : 'No',
       a.major ?? '',
-      a.gender ?? '',
-      Array.isArray(a.race) ? a.race.join('; ') : '',
-      a.linkedin ?? '',
-      a.website ?? '',
+      yesNo(a.previously_applied),
       a.time_commitment ?? '',
-      a.created_at ? new Date(a.created_at).toISOString() : '',
+      a.meeting_availability ?? '',
+      a.retreat_availability ?? '',
       ...questionNumbers.map(n => essays?.get(n) ?? ''),
+      a.additional_context ?? '',
+      Array.isArray(a.race) ? a.race.join('; ') : '',
+      a.ethnicity ?? '',
+      yesNo(a.transfer),
+      a.created_at ? new Date(a.created_at).toISOString() : '',
     ].map(csv).join(',')
   })
 

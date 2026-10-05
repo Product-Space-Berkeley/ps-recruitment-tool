@@ -46,7 +46,6 @@ interface ApplicantRow {
   applicant_id: string
   first_name: string
   last_name: string
-  desired_roles: string | null
   r0: number
   r1: number
   r2: number
@@ -543,7 +542,6 @@ export default function GradingConsolePage() {
                       >
                         Name <SortIcon active={sortKey === 'name'} direction={sortDir} />
                       </th>
-                      <th className="text-left px-5 py-2 text-xs text-[var(--text-muted)] font-medium">Role</th>
                       <th
                         className="text-right px-5 py-2 text-xs text-[var(--text-muted)] font-medium cursor-pointer hover:text-[var(--text-primary)] select-none"
                         onClick={() => toggleSort('reviews')}
@@ -577,7 +575,6 @@ export default function GradingConsolePage() {
                               {a.last_name}, {a.first_name}
                               <span className="ml-2 text-[var(--text-muted)]">{expanded ? '▲' : '▼'}</span>
                             </td>
-                            <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{a.desired_roles ?? '—'}</td>
                             <td className="px-5 py-3 text-right text-[var(--text-muted)]">
                               {a.review_count}/{a.assigned_count}
                             </td>
@@ -596,7 +593,7 @@ export default function GradingConsolePage() {
                           </tr>
                           {expanded && (
                             <tr className="bg-[var(--bg-raised)]">
-                              <td colSpan={selectedRatingKey ? 5 : 4} className="px-5 py-4">
+                              <td colSpan={selectedRatingKey ? 4 : 3} className="px-5 py-4">
                                 {a.reviews.length === 0 ? (
                                   <p className="text-xs text-[var(--text-muted)]">No reviews submitted yet.</p>
                                 ) : (
