@@ -238,11 +238,16 @@ export default function AdminPage() {
 
   async function toggleAccepting(cycle: RecruitmentCycle) {
     const updated = { ...cycle, accepting_applications: !cycle.accepting_applications }
-    await fetch(`/api/cycles/${cycle.id}`, {
+    const res = await fetch(`/api/cycles/${cycle.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accepting_applications: updated.accepting_applications }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      alert(`Couldn't ${updated.accepting_applications ? 'open' : 'close'} applications: ${err?.error ?? res.statusText}`)
+      return
+    }
     setCycles(prev => prev.map(c => c.id === cycle.id ? updated : c))
     if (selectedCycle?.id === cycle.id) setSelectedCycle(updated)
   }
