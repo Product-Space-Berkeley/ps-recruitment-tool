@@ -13,4 +13,5 @@ export const PS_INDEXES = [
   { collection: 'genericreviews', key: { round_id: 1, applicant_id: 1, grader_email: 1 }, unique: true },
   { collection: 'genericreviews', key: { grader_email: 1, round_id: 1 } },
   { collection: 'candidateroundscores', key: { round_id: 1, applicant_id: 1, created_at: -1 } },
+  { collection: 'candidateroundscores', key: { round_id: 1, close_id: 1 } },
 ]

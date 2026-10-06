@@ -11,7 +11,7 @@ const directory = await mkdtemp(join(tmpdir(), 'ps-db-test-'))
 let repl
 try {
   await symlink(resolve('node_modules'), join(directory, 'node_modules'), 'dir')
-  const sources = ['src/lib/models/index.ts', 'src/lib/mongooseConfig.ts', ...['models', 'domain', 'records', 'rounds', 'assignments', 'assignmentService', 'enrollment', 'rubrics', 'rubricService', 'reviewService', 'scoring', 'rubricV2', 'rubricCompatibility', 'rubricDraftService', 'rubricImport', 'weightedRubric', 'points', 'templates', 'candidateScores'].map(n => `src/lib/ps/${n}.ts`)]
+  const sources = ['src/lib/models/index.ts', 'src/lib/mongooseConfig.ts', ...['models', 'domain', 'records', 'rounds', 'assignments', 'assignmentService', 'enrollment', 'rubrics', 'rubricService', 'reviewService', 'scoring', 'rubricV2', 'rubricCompatibility', 'rubricDraftService', 'rubricImport', 'weightedRubric', 'points', 'templates', 'candidateScores', 'scoreService', 'roundLifecycle', 'candidateProfile'].map(n => `src/lib/ps/${n}.ts`)]
   const outputs = new Map(sources.map((s, i) => [resolve(s), join(directory, `module-${i}.mjs`)]))
   for (const sourcePath of sources) {
     const source = (await readFile(sourcePath, 'utf8')).replace("import mongoose, { Schema, model, models } from 'mongoose'", "import mongoose from 'mongoose'; const { Schema, model, models } = mongoose").replace("import { Schema, model, models } from 'mongoose'", "import mongoose from 'mongoose'; const { Schema, model, models } = mongoose")
@@ -318,6 +318,48 @@ try {
   const secondFresh = await reviews.submitReview({ ...body(fresh, freshAnswers), rubric_version_id: v2.id }, freshGrader2)
   assert.equal(secondFresh.rubric_version_id, v2.id); assert.equal(secondFresh.score, 13)
   assert.equal((await ps.CandidateRound.findOne({ round_id: writtenRound.id, applicant_id: fresh._id })).state, 'ready_for_deliberation')
+  // Progress, close (with frozen snapshots), reopen, profile and roster.
+  const lifecycle = await load('src/lib/ps/roundLifecycle.ts'), scoreService = await load('src/lib/ps/scoreService.ts'), profiles = await load('src/lib/ps/candidateProfile.ts')
+  const progress = await lifecycle.roundProgress(writtenRound.id)
+  assert.deepEqual([progress.candidates, progress.ready, progress.evaluations_done, progress.evaluations_needed], [3, 1, 3, 6])
+  assert.deepEqual(progress.incomplete.map(c => c.name).sort(), ['Jun Points', 'Unknown Points'])
+  assert.ok(progress.graders.every(g => g.assigned >= g.done && g.remaining >= 0))
+  await assert.rejects(() => lifecycle.closeRound(writtenRound.id, {}, 'lead@example.test'), e => e.status === 409 && /2 candidates are still waiting/.test(e.message))
+  const closed = await lifecycle.closeRound(writtenRound.id, { override: true }, 'lead@example.test')
+  assert.deepEqual([closed.frozen, closed.incomplete], [3, 2])
+  assert.equal((await rounds.psRound(writtenRound.id)).status, 'deliberating')
+  const juniorGraders = await graderFor(junior)
+  await assert.rejects(() => reviews.submitReview(body(junior, juniorAnswers, { revision: 1 }), juniorGraders[0]), e => e.status === 409, 'closed rounds accept no evaluations')
+  const frozen = await scoreService.frozenRoundScores(new mongoose.Types.ObjectId(writtenRound.id))
+  const frozenFresh = frozen.find(f => f.applicant_id === String(fresh._id)), frozenJunior = frozen.find(f => f.applicant_id === String(junior._id))
+  assert.deepEqual([frozenFresh.complete, frozenFresh.score, frozenFresh.low, frozenFresh.high, frozenFresh.max_points], [true, 13.5, 13, 14, 17])
+  assert.deepEqual([frozenJunior.complete, frozenJunior.score, frozenJunior.reviews], [false, null, 1])
+  const snapshot = await ps.CandidateRoundScore.findOne({ round_id: writtenRound.id, applicant_id: fresh._id }).lean()
+  await assert.rejects(() => ps.CandidateRoundScore.updateOne({ _id: snapshot._id }, { $set: { score: 17 } }), e => e.status === 409, 'snapshots are append-only')
+  await assert.rejects(() => lifecycle.closeRound(writtenRound.id, { override: true }, 'lead@example.test'), e => e.status === 409)
+  // Reopen, add the missing evaluation, close again: a new snapshot; the first one stays.
+  await lifecycle.reopenRound(writtenRound.id)
+  await reviews.submitReview(body(junior, juniorAnswers.map(r => r.question_id === 'up_impact' ? { ...r, value: 3 } : r), { rubric_version_id: v2.id }), juniorGraders[1])
+  const reclosed = await lifecycle.closeRound(writtenRound.id, { override: true }, 'lead@example.test')
+  assert.notEqual(reclosed.close_id, closed.close_id)
+  assert.equal(await ps.CandidateRoundScore.countDocuments({ round_id: writtenRound.id }), 6)
+  const refrozen = await scoreService.frozenRoundScores(new mongoose.Types.ObjectId(writtenRound.id))
+  assert.deepEqual(refrozen.find(f => f.applicant_id === String(junior._id)).score, 11, 'the latest close reflects the late evaluation (10 and 12)')
+  // Decisions still work during deliberation.
+  await enrollment.decideEnrollment(writtenRound.id, String(fresh._id), 'advance', 'lead@example.test')
+  const profile = await profiles.candidateProfile(String(fresh._id))
+  assert.deepEqual(profile.timeline.map(t => [t.round.name, t.enrolled, t.state]), [['Written App / Resume Screening', true, 'advanced'], ['PD Design Interview', true, 'pending'], ['Final Round: Take-home + Social', false, null]])
+  assert.equal(profile.current_round, 'PD Design Interview')
+  const first = profile.timeline[0]
+  assert.deepEqual([first.evaluations.length, first.score.frozen, first.score.score, first.revisions], [2, true, 13.5, 3])
+  assert.ok(profile.rubrics.some(r => r.id === v1.id) && profile.rubrics.some(r => r.id === v2.id), 'each evaluation renders with the exact rubric version it answered')
+  assert.equal(profile.applicant.year, 'Freshman')
+  await assert.rejects(() => profiles.candidateProfile(String(new mongoose.Types.ObjectId())), e => e.status === 404)
+  const roster = await profiles.cycleRoster(String(pointsCycle._id))
+  assert.equal(roster.candidates.length, 3)
+  assert.deepEqual(roster.candidates.find(c => c.id === String(fresh._id)).round, 'PD Design Interview')
+  assert.equal(roster.candidates.find(c => c.id === String(junior._id)).score.score, 11)
+  console.log('Round progress, close with override, frozen append-only snapshots, reopen/re-close, candidate profile and cycle roster passed.')
   console.log('PS standard rounds, template drafts, points publication, grade-specific scoring, server-computed totals, revisions and wording-only republish passed.')
   }
   {

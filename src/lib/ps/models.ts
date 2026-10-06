@@ -92,7 +92,7 @@ GenericReviewSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1 }, { u
 GenericReviewSchema.index({ grader_email: 1, round_id: 1 })
 appendOnly(GenericReviewSchema)
 export const GenericReview = models.GenericReview || model('GenericReview', GenericReviewSchema)
-// Calculated outputs are separate from immutable raw reviews. No PS score is calculated yet.
+// Calculated outputs are separate from immutable raw reviews and are themselves append-only.
 const CandidateRoundScoreSchema = new Schema({
   round_id: { type: Schema.Types.ObjectId, ref: 'Round', required: true }, applicant_id: { type: Schema.Types.ObjectId, ref: 'Applicant', required: true },
   rubric_version_id: { type: Schema.Types.ObjectId, ref: 'RubricVersion', default: null },
@@ -100,9 +100,15 @@ const CandidateRoundScoreSchema = new Schema({
   input_review_ids: { type: [Schema.Types.ObjectId], default: [] }, input_fingerprint: { type: String, required: true },
   status: { type: String, enum: ['unconfigured', 'calculated'], required: true }, score: { type: Number, default: null },
   criterion_results: { type: Schema.Types.Mixed, default: null }, calculated_at: { type: Date, default: null },
+  // Close-round snapshot fields. Each close writes a new set sharing one close_id; nothing is overwritten.
+  close_id: { type: Schema.Types.ObjectId, default: null }, closed_by: { type: String, default: null },
+  reviews: { type: Number, default: 0 }, required: { type: Number, default: 0 }, complete: { type: Boolean, default: false },
+  percent: { type: Number, default: null }, low: { type: Number, default: null }, high: { type: Number, default: null }, max_points: { type: Number, default: null },
   created_at: { type: Date, default: Date.now },
 })
 CandidateRoundScoreSchema.index({ round_id: 1, applicant_id: 1, created_at: -1 })
+CandidateRoundScoreSchema.index({ round_id: 1, close_id: 1 })
+appendOnly(CandidateRoundScoreSchema)
 export const CandidateRoundScore = models.CandidateRoundScore || model('CandidateRoundScore', CandidateRoundScoreSchema)
 
 // Every weighted submission is an immutable revision; only its active pointer changes.

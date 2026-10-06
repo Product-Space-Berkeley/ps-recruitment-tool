@@ -5,6 +5,7 @@ import PSReviewHistory from '@/components/PSReviewHistory'
 import PSRubricEditor, { type SavePhase } from '@/components/PSRubricEditor'
 import PSProgression from '@/components/PSProgression'
 import PSAssignments from '@/components/PSAssignments'
+import PSProgressBoard from '@/components/PSProgressBoard'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentUser } from '@/lib/auth'
 import { Round, RecruitmentCycle, AuthorizedUser } from '@/lib/types'
@@ -69,7 +70,7 @@ export default function RoundSetupPage() {
   const readOnly = busy || cycle?.status !== 'active'
   const orderLocked = rounds.some(r => r.configuration_locked)
   return <main className="mx-auto w-full min-w-0 max-w-3xl p-5 text-[var(--text-primary)] space-y-5">
-    <nav className="flex gap-4 text-sm"><Link href="/dashboard">Dashboard</Link><Link href="/admin">Legacy admin console</Link><Link href="/grade/ps">PS grading</Link></nav>
+    <nav className="flex gap-4 text-sm"><Link href="/dashboard">Dashboard</Link><Link href="/admin">Legacy admin console</Link><Link href="/grade/ps">PS grading</Link><Link href={cycleId ? `/admin/candidates?cycle=${cycleId}` : '/admin/candidates'}>Candidates</Link></nav>
     <h1 className="text-2xl font-semibold">Recruitment rounds</h1>
     <p className="text-[var(--text-muted)]">Choose a round to edit its rubric, manage graders or review progress.</p>
     {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
@@ -94,7 +95,7 @@ export default function RoundSetupPage() {
         {selected && <>
           <nav aria-label="Round workspace" className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3">{[['rubric', 'Rubric'], ['settings', 'Setup & graders'], ['reviews', 'Reviews & progression']].map(([id, label]) => <button key={id} className={buttonClass} aria-pressed={panel === id} disabled={busy} onClick={() => setPanel(id)}>{label}</button>)}</nav>
           <div hidden={panel !== 'settings'} className="space-y-5"><RoundEditor key={`settings:${selected.id}:${selected.configuration_version}`} round={selected} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/rounds/${selected.id}`, body, 'PATCH'); setSelected(saved) })} onArchive={() => action(() => requestJson(`/api/ps/rounds/${selected.id}`, { configuration_version: selected.configuration_version, archived: !selected.archived }, 'PATCH'))} /><PSReassignment key={`reassignment:${selected.id}`} roundId={selected.id} readOnly={readOnly || selected.archived === true || selected.status !== 'grading'} /><PSAssignments key={`assignments:${selected.id}:${selected.configuration_version}`} round={selected} readOnly={readOnly} onChange={() => load(cycleId)} /></div>
-          <div hidden={panel !== 'reviews'} className="space-y-5"><PSProgression key={`progression:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} firstRound={rounds.find(r => !r.archived)?.id === selected.id} onChange={() => load(cycleId)} /><PSReviewHistory key={`history:${selected.id}`} roundId={selected.id} /></div>
+          <div hidden={panel !== 'reviews'} className="space-y-5"><PSProgressBoard key={`progress:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} onChange={() => load(cycleId)} /><PSProgression key={`progression:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} firstRound={rounds.find(r => !r.archived)?.id === selected.id} onChange={() => load(cycleId)} /><PSReviewHistory key={`history:${selected.id}`} roundId={selected.id} /></div>
         </>}
       </div>}
     </>}
