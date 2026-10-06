@@ -84,6 +84,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'round_id and applicant_id are required.' }, { status: 400 })
   }
 
+  if (await Round.exists({ _id: body.round_id, workflow: 'ps' })) return NextResponse.json({ error: 'Configured PS rounds require rubric-versioned generic reviews.' }, { status: 409 })
+
   const ratings = Array.from({ length: 10 }, (_, i) => body[`r${i}`])
   const validRatings = ratings.every((rating, i) => (
     typeof rating === 'number'

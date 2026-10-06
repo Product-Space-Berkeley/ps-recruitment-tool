@@ -23,10 +23,16 @@
     "db:security:apply": "node scripts/migrate-security-indexes.mjs --apply",
     "test:race": "node scripts/race-toctou.mjs",
     "test:load": "node scripts/loadtest.mjs",
-    "preopen:static": "npm run lint && npm run typecheck && npm run test:security && npm run build && npm audit --audit-level=high"
+    "preopen:static": "npm run lint && npm run typecheck && npm run test:security && npm run build && npm audit --audit-level=high",
+    "test:ps": "node scripts/ps-workflow-unit.mjs",
+    "test:ps:integration": "node scripts/ps-workflow-integration.mjs",
+    "db:ps:preflight": "node scripts/ps-indexes.mjs",
+    "db:ps:apply": "node scripts/ps-indexes.mjs --apply",
+    "test:ps:http": "node scripts/ps-workflow-http.mjs"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",
+    "exceljs": "4.4.0",
     "mongoose": "^9.9.3",
     "next": "16.3.1",
     "next-auth": "^4.24.15",
@@ -42,7 +48,13 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "mongodb-memory-server": "^11.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }

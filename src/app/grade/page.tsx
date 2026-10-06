@@ -118,7 +118,7 @@ export default function GradePage() {
       roundIds.map(id => fetch(`/api/rounds/${id}`).then(r => r.ok ? r.json() : null))
     )
     const rounds = (roundResults.filter(Boolean) as Round[])
-      .filter(round => round.status === 'grading')
+      .filter(round => round.status === 'grading' && round.workflow !== 'ps')
       .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
 
     // Fetch the cycle name for each unique cycle_id touched by these rounds

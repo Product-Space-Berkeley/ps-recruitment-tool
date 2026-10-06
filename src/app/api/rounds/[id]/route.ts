@@ -65,8 +65,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (Object.keys(allowed).length === 0) return NextResponse.json({ error: 'No valid updates supplied.' }, { status: 400 })
 
-  const roundSnapshot = await Round.findById(id).select('cycle_id status').lean()
+  const roundSnapshot = await Round.findById(id).select('cycle_id status workflow').lean()
   if (!roundSnapshot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  if (roundSnapshot.workflow === 'ps') return NextResponse.json({ error: 'Use PS Round Setup to edit configured rounds.' }, { status: 409 })
 
   const resultingStatus = typeof allowed.status === 'string' ? allowed.status : roundSnapshot.status
   if (roundSnapshot.status === 'ended' && resultingStatus !== 'ended') {
@@ -158,6 +160,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   await connectDB()
   const { id } = await params
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid round id.' }, { status: 400 })
+
+  if (await Round.exists({ _id: id, workflow: 'ps' })) return NextResponse.json({ error: 'Configured PS rounds cannot be deleted. Archive an unused round in PS Round Setup.' }, { status: 409 })
 
   let existed = false
   await mongoose.connection.transaction(async dbSession => {

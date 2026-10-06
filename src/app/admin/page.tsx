@@ -363,7 +363,7 @@ export default function AdminPage() {
   // ── rounds ───────────────────────────────────────────────
   async function loadRounds(cycleId: string) {
     const data: Round[] = await fetch(`/api/cycles/${cycleId}/rounds`).then(r => r.json())
-    setRounds(data ?? [])
+    setRounds((data ?? []).filter((round: Round) => round.workflow !== 'ps'))
   }
 
   async function updateRoundStatus(round: Round, status: RoundStatus) {
@@ -915,6 +915,7 @@ export default function AdminPage() {
           <button className="text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-active)] px-3 py-1.5 rounded-lg">
             Admin Console
           </button>
+          <button onClick={() => router.push('/admin/rounds')} className="text-xs px-3 py-1.5">PS Round Setup</button>
           <button onClick={() => router.push('/admin/grading')} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors px-3 py-1.5 rounded-lg">
             Grading Console
           </button>

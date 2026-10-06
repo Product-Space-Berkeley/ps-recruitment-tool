@@ -114,6 +114,17 @@ export const EssayResponse = models.EssayResponse || model('EssayResponse', Essa
 
 // ─── Rounds ──────────────────────────────────────────────────
 const RoundSchema = new Schema({
+  workflow:           { type: String, enum: ['legacy', 'ps'], default: 'legacy' },
+  evaluation_type:    { type: String, enum: ['rubric', 'interview', 'social_feedback', 'submission_rubric'], default: null },
+  reviews_required:   { type: Number, default: 1, min: 1, max: 500 },
+  eligible_grader_emails: { type: [String], default: [] },
+  // PS pair rounds: each candidate is assigned to an interviewer pair that submits one evaluation.
+  assignment_mode:    { type: String, enum: ['individual', 'pair'], default: 'individual' },
+  interviewer_pairs:  { type: [new Schema({ id: { type: String, required: true }, emails: { type: [String], required: true } }, { _id: false })], default: [] },
+  rubric_version_id:  { type: Schema.Types.ObjectId, ref: 'RubricVersion', default: null },
+  scoring_engine:     { type: String, enum: ['unconfigured'], default: 'unconfigured' },
+  configuration_version: { type: Number, default: 0, min: 0 },
+  archived:           { type: Boolean, default: false },
   cycle_id:           { type: Schema.Types.ObjectId, ref: 'RecruitmentCycle', required: true },
   name:               { type: String, required: true },
   order_index:        { type: Number, required: true },
@@ -138,6 +149,7 @@ const GraderAssignmentSchema = new Schema({
   grader_email: { type: String, required: true, lowercase: true, trim: true },
   assigned_at:  { type: Date, default: Date.now },
   submission_count: { type: Number, default: 0, min: 0 },
+  panel_id:     { type: String, default: null }, // PS pair rounds: the interviewer pair this row belongs to
 })
 GraderAssignmentSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1 }, { unique: true })
 GraderAssignmentSchema.index({ grader_email: 1, round_id: 1, applicant_id: 1 })
