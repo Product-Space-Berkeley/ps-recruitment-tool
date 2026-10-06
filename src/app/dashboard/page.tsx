@@ -7,6 +7,7 @@ import { signOut } from 'next-auth/react'
 import { getCurrentUser, canCreateSession, canManageUsers, CurrentUser } from '@/lib/auth'
 import { Session, AuthorizedUser, Round, UserRole } from '@/lib/types'
 import ThemeToggle from '@/components/ThemeToggle'
+import { requestArray, requestJson } from '@/lib/ps/client'
 
 export default function Dashboard() {
   const router = useRouter()
@@ -15,6 +16,11 @@ export default function Dashboard() {
   const [mySessions, setMySessions] = useState<Session[]>([])
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [pendingGrading, setPendingGrading] = useState<number | null>(null)
+  const [sessionError, setSessionError] = useState('')
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [gradingError, setGradingError] = useState('')
+  const [initializationError, setInitializationError] = useState('')
+  const [usersLoadError, setUsersLoadError] = useState('')
 
   // Join / create
   const [tab, setTab] = useState<'join' | 'create'>('join')
@@ -42,156 +48,118 @@ export default function Dashboard() {
   }
 
   const loadSessions = useCallback(async (email: string) => {
-    const allSessions: Session[] = await fetch('/api/sessions').then(r => r.json())
-    const mine = allSessions.filter(
-      s => s.created_by === email
-    )
-    setMySessions(mine)
+    setSessionsLoading(true); setSessionError('')
+    try {
+      const allSessions = await requestArray<Session>('/api/sessions')
+      setMySessions(allSessions.filter(session => session.created_by === email))
+    } catch (error) { setSessionError((error as Error).message) }
+    finally { setSessionsLoading(false) }
   }, [])
 
   const loadUsers = useCallback(async () => {
-    setUsersLoading(true)
-    const data: AuthorizedUser[] = await fetch('/api/authorized-users').then(r => r.json())
-    setAuthorizedUsers(data ?? [])
-    setUsersLoading(false)
+    setUsersLoading(true); setUsersLoadError('')
+    try { setAuthorizedUsers(await requestArray<AuthorizedUser>('/api/authorized-users')) }
+    catch (error) { setUsersLoadError((error as Error).message) }
+    finally { setUsersLoading(false) }
+  }, [])
+
+  const loadGrading = useCallback(async (email: string) => {
+    setGradingError('')
+    try {
+      type Row = { round_id: string; applicant_id: string }
+      const [assignments, reviews] = await Promise.all([
+        requestArray<Row>(`/api/grader-assignments?grader_email=${encodeURIComponent(email)}`),
+        requestArray<Row>(`/api/reviews?grader_email=${encodeURIComponent(email)}`),
+      ])
+      const roundIds = [...new Set(assignments.map(assignment => assignment.round_id))]
+      const rounds = await Promise.all(roundIds.map(id => requestJson<Round>(`/api/rounds/${id}`)))
+      const activeRoundIds = new Set(rounds.filter(round => round.status === 'grading' && round.workflow !== 'ps').map(round => round.id))
+      const assigned = assignments.filter(assignment => activeRoundIds.has(assignment.round_id)).length
+      const reviewed = reviews.filter(review => activeRoundIds.has(review.round_id)).length
+      setPendingGrading(Math.max(0, assigned - reviewed))
+    } catch (error) { setPendingGrading(null); setGradingError((error as Error).message) }
   }, [])
 
   useEffect(() => {
+    let active = true
     async function init() {
-      const user = await getCurrentUser()
-      if (!user) {
-        router.replace('/')
-        return
+      try {
+        const user = await getCurrentUser()
+        if (!active) return
+        if (!user) { router.replace('/'); return }
+        setCurrentUser(user)
+        setLoading(false)
+        // Each widget owns its failure state; one rejected API must not block the dashboard.
+        await Promise.all([loadSessions(user.email), loadGrading(user.email), ...(canManageUsers(user.role) ? [loadUsers()] : [])])
+      } catch (error) {
+        if (active) { setInitializationError((error as Error).message); setLoading(false) }
       }
-      setCurrentUser(user)
-      await Promise.all([
-        loadSessions(user.email),
-        (async () => {
-          const [assignments, reviews] = await Promise.all([
-            fetch(`/api/grader-assignments?grader_email=${encodeURIComponent(user.email)}`).then(r => r.json()),
-            fetch(`/api/reviews?grader_email=${encodeURIComponent(user.email)}`).then(r => r.json()),
-          ])
-
-          const assignmentRows: { round_id: string; applicant_id: string }[] = Array.isArray(assignments) ? assignments : []
-          const reviewRows: { round_id: string; applicant_id: string }[] = Array.isArray(reviews) ? reviews : []
-          const roundIds = [...new Set(assignmentRows.map(assignment => assignment.round_id))]
-          const rounds = (await Promise.all(
-            roundIds.map(id => fetch(`/api/rounds/${id}`).then(r => r.ok ? r.json() : null))
-          )).filter(Boolean) as Round[]
-          const activeRoundIds = new Set(
-            rounds.filter(round => round.status === 'grading').map(round => round.id)
-          )
-
-          const assigned = assignmentRows.filter(assignment => activeRoundIds.has(assignment.round_id)).length
-          const reviewed = reviewRows.filter(review => activeRoundIds.has(review.round_id)).length
-          setPendingGrading(Math.max(0, assigned - reviewed))
-        })(),
-      ])
-      if (canManageUsers(user.role)) await loadUsers()
-      setLoading(false)
     }
-    init()
-  }, [router, loadSessions, loadUsers])
+    void init()
+    return () => { active = false }
+  }, [router, loadSessions, loadGrading, loadUsers])
 
   async function handleSignOut() {
     await signOut({ callbackUrl: '/' })
   }
 
   async function handleJoin(e: React.FormEvent) {
-    e.preventDefault()
-    setJoinError('')
-    setJoinLoading(true)
+    e.preventDefault(); setJoinError(''); setJoinLoading(true)
     const sessionId = joinSessionId.trim().toUpperCase()
-    if (!sessionId) { setJoinError('Enter a session ID.'); setJoinLoading(false); return }
-
-    const res = await fetch('/api/session-members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, user_email: currentUser!.email }),
-    })
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}))
-      setJoinError(error.error ?? 'Session not found.')
-      setJoinLoading(false)
-      return
-    }
-    router.push(`/session/${sessionId}`)
+    try {
+      if (!sessionId) throw new Error('Enter a session ID.')
+      await requestJson('/api/session-members', { session_id: sessionId, user_email: currentUser!.email })
+      router.push(`/session/${sessionId}`)
+    } catch (error) { setJoinError((error as Error).message) }
+    finally { setJoinLoading(false) }
   }
 
   async function handleCreate(e: React.FormEvent) {
-    e.preventDefault()
-    setCreateError('')
-    setCreateLoading(true)
+    e.preventDefault(); setCreateError(''); setCreateLoading(true)
     const sessionName = createSessionName.trim()
-    if (!sessionName) { setCreateError('Enter a session name.'); setCreateLoading(false); return }
-
-    const sessionId = Math.random().toString(36).substring(2, 8).toUpperCase()
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: sessionId, name: sessionName, status: 'active',
-        created_by: currentUser!.email, anonymous: false,
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      setCreateError('Failed to create session: ' + (err.error ?? res.statusText))
-      setCreateLoading(false)
-      return
-    }
-
-    await fetch('/api/session-members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, user_email: currentUser!.email }),
-    })
-    router.push(`/session/${sessionId}`)
+    try {
+      if (!sessionName) throw new Error('Enter a session name.')
+      const sessionId = Math.random().toString(36).substring(2, 8).toUpperCase()
+      await requestJson('/api/sessions', { id: sessionId, name: sessionName, status: 'active', created_by: currentUser!.email, anonymous: false })
+      await requestJson('/api/session-members', { session_id: sessionId, user_email: currentUser!.email })
+      router.push(`/session/${sessionId}`)
+    } catch (error) { setCreateError((error as Error).message) }
+    finally { setCreateLoading(false) }
   }
 
   async function handleAddUser(e: React.FormEvent) {
     e.preventDefault()
     const email = newEmail.trim().toLowerCase()
     if (!email || !email.includes('@')) { setUserError('Enter a valid email.'); return }
-    const res = await fetch('/api/authorized-users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, role: newRole, added_by: currentUser!.email }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      setUserError(err.error ?? 'Failed to add user.')
-    } else {
+    try {
+      await requestJson('/api/authorized-users', { email, role: newRole, added_by: currentUser!.email })
       setNewEmail(''); setUserError(''); await loadUsers()
-    }
+    } catch (error) { setUserError((error as Error).message) }
   }
 
   async function handleBulkAdd(e: React.FormEvent) {
     e.preventDefault()
-    const emails = bulkEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'))
-    if (emails.length === 0) { setUserError('No valid emails found.'); return }
-    await Promise.all(emails.map(email =>
-      fetch('/api/authorized-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.toLowerCase(), role: newRole, added_by: currentUser!.email }),
-      })
-    ))
-    setBulkEmails(''); setShowBulk(false); setUserError(''); await loadUsers()
+    const emails = bulkEmails.split(/[\n,]+/).map(email => email.trim()).filter(email => email.includes('@'))
+    if (!emails.length) { setUserError('No valid emails found.'); return }
+    const results = await Promise.allSettled(emails.map(email => requestJson('/api/authorized-users', { email: email.toLowerCase(), role: newRole, added_by: currentUser!.email })))
+    const failures = results.filter(result => result.status === 'rejected')
+    if (failures.length) setUserError(`${failures.length} of ${emails.length} additions failed: ${(failures[0].reason as Error).message}`)
+    else { setBulkEmails(''); setShowBulk(false); setUserError('') }
+    await loadUsers()
   }
 
   async function updateUserRole(id: string, role: UserRole) {
-    await fetch(`/api/authorized-users/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role }),
-    })
-    await loadUsers()
+    try {
+      await requestJson(`/api/authorized-users/${id}`, { role }, 'PATCH')
+      setUserError(''); await loadUsers()
+    } catch (error) { setUserError((error as Error).message) }
   }
 
   async function removeUser(id: string) {
-    await fetch(`/api/authorized-users/${id}`, { method: 'DELETE' })
-    await loadUsers()
+    try {
+      await requestJson(`/api/authorized-users/${id}`, undefined, 'DELETE')
+      setUserError(''); await loadUsers()
+    } catch (error) { setUserError((error as Error).message) }
   }
 
   if (loading) {
@@ -202,7 +170,11 @@ export default function Dashboard() {
     )
   }
 
-  const user = currentUser!
+  if (!currentUser) return <main className="min-h-screen bg-[var(--bg-base)] p-8 text-[var(--text-primary)]">
+    {initializationError ? <><p role="alert">Unable to load the dashboard: {initializationError}</p><button className="underline" onClick={() => window.location.reload()}>Retry dashboard</button></> : <p>Redirecting to sign in…</p>}
+  </main>
+
+  const user = currentUser
   const isAdmin = user.role === 'admin'
 
   const ROLE_BADGE: Record<UserRole, string> = {
@@ -243,6 +215,10 @@ export default function Dashboard() {
 
       <div className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-6 pt-8">
 
+        <div className="flex gap-4 text-sm">
+          {currentUser?.role !== 'grader' && <button onClick={() => router.push('/admin/rounds')}>PS Round Setup</button>}
+          <button onClick={() => router.push('/grade/ps')}>PS Grading</button>
+        </div>
         {/* Shortcuts */}
         <div className={`grid gap-3 ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {isAdmin && (
@@ -275,6 +251,11 @@ export default function Dashboard() {
             </p>
           </button>
         </div>
+
+        {gradingError && <div role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-[var(--text-primary)]">
+          <p>Unable to load your grading count: {gradingError}</p>
+          <button className="underline mt-2" onClick={() => void loadGrading(user.email)}>Retry grading count</button>
+        </div>}
 
         {/* Join / Create session */}
         <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border)] overflow-hidden">
@@ -333,7 +314,11 @@ export default function Dashboard() {
         </div>
 
         {/* Your Sessions */}
-        {mySessions.length > 0 && (
+        <section aria-label="Your Sessions">
+          {sessionsLoading && <p role="status">Loading sessions…</p>}
+          {sessionError && <div role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-[var(--text-primary)]"><p>Unable to load your sessions: {sessionError}</p><button className="underline mt-2" onClick={() => void loadSessions(user.email)}>Retry sessions</button></div>}
+          {!sessionsLoading && !sessionError && mySessions.length === 0 && <p className="text-sm text-[var(--text-muted)]">No sessions yet.</p>}
+          {mySessions.length > 0 && (
           <div>
             <h2 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Your Sessions</h2>
             <div className="space-y-2">
@@ -368,6 +353,8 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        </section>
 
         {/* User Management (admins only) */}
         {isAdmin && (
@@ -426,7 +413,9 @@ export default function Dashboard() {
               {userError && <p className="text-red-400 text-xs">{userError}</p>}
 
               {/* User list */}
-              {usersLoading ? (
+              {usersLoadError ? (
+                <div role="alert" className="text-sm text-red-400"><p>Unable to load authorized users: {usersLoadError}</p><button className="underline mt-2" onClick={() => void loadUsers()}>Retry authorized users</button></div>
+              ) : usersLoading ? (
                 <p className="text-[var(--text-muted)] text-sm text-center py-2">Loading...</p>
               ) : authorizedUsers.length === 0 ? (
                 <p className="text-[var(--text-muted)] text-sm text-center py-2">No users yet.</p>

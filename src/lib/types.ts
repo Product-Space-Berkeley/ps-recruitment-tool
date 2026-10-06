@@ -118,6 +118,19 @@ export interface AuthorizedUser {
 }
 
 export interface Round {
+  workflow?: 'legacy' | 'ps'
+  evaluation_type?: 'rubric' | 'interview' | 'social_feedback' | 'submission_rubric' | null
+  reviews_required?: number
+  eligible_grader_emails?: string[]
+  assignment_mode?: 'individual' | 'pair'
+  grading_access?: 'open' | 'assigned'
+  interviewer_pairs?: { id: string; emails: string[] }[]
+  rubric_version_id?: string | null
+  scoring_engine?: 'unconfigured'
+  configuration_version?: number
+  archived?: boolean
+  configuration_locked?: boolean // Read-only API activity flags; not stored round settings.
+  rubric_locked?: boolean
   id: string
   cycle_id: string
   name: string

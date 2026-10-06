@@ -198,10 +198,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   await connectDB()
   const { id } = await params
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid cycle id.' }, { status: 400 })
+  if (await Round.exists({ cycle_id: id, workflow: 'ps' })) return NextResponse.json({ error: 'This cycle contains configured PS rounds. End the cycle to preserve its grading history.' }, { status: 409 })
+
   let existed = false
+  let protectedPSHistory = false
   await mongoose.connection.transaction(async session => {
-    const cycle = await RecruitmentCycle.findById(id).select('_id').session(session).lean()
+    protectedPSHistory = false
+    const cycle = await RecruitmentCycle.findOneAndUpdate({ _id: id }, { $inc: { lifecycle_write_count: 1 } }, { session, returnDocument: 'after' }).select('_id').lean()
     if (!cycle) return
+    if (await Round.exists({ cycle_id: id, workflow: 'ps' }).session(session)) { protectedPSHistory = true; return }
     existed = true
 
     // MongoDB transaction operations must be serialized; Promise.all inside a
@@ -246,6 +251,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await CoffeeChatNote.deleteMany({ cycle_id: id }, { session })
     await RecruitmentCycle.deleteOne({ _id: id }, { session })
   })
+  if (protectedPSHistory) return NextResponse.json({ error: 'This cycle contains configured PS rounds. End the cycle to preserve its grading history.' }, { status: 409 })
   if (!existed) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
