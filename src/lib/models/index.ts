@@ -120,6 +120,7 @@ const RoundSchema = new Schema({
   eligible_grader_emails: { type: [String], default: [] },
   // PS pair rounds: each candidate is assigned to an interviewer pair that submits one evaluation.
   assignment_mode:    { type: String, enum: ['individual', 'pair'], default: 'individual' },
+  grading_access:     { type: String, enum: ['open', 'assigned'], default: 'assigned' }, // open: graders pick candidates themselves
   interviewer_pairs:  { type: [new Schema({ id: { type: String, required: true }, emails: { type: [String], required: true } }, { _id: false })], default: [] },
   rubric_version_id:  { type: Schema.Types.ObjectId, ref: 'RubricVersion', default: null },
   scoring_engine:     { type: String, enum: ['unconfigured'], default: 'unconfigured' },

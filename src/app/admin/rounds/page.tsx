@@ -94,7 +94,7 @@ export default function RoundSetupPage() {
         {!selected && <RoundEditor key={`new-round:${cycleId}`} round={null} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/cycles/${cycleId}/rounds`, body); chooseRound(saved) })} onArchive={async () => {}} />}
         {selected && <>
           <nav aria-label="Round workspace" className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3">{[['rubric', 'Rubric'], ['settings', 'Setup & graders'], ['reviews', 'Reviews & progression']].map(([id, label]) => <button key={id} className={buttonClass} aria-pressed={panel === id} disabled={busy} onClick={() => setPanel(id)}>{label}</button>)}</nav>
-          <div hidden={panel !== 'settings'} className="space-y-5"><RoundEditor key={`settings:${selected.id}:${selected.configuration_version}`} round={selected} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/rounds/${selected.id}`, body, 'PATCH'); setSelected(saved) })} onArchive={() => action(() => requestJson(`/api/ps/rounds/${selected.id}`, { configuration_version: selected.configuration_version, archived: !selected.archived }, 'PATCH'))} /><PSReassignment key={`reassignment:${selected.id}`} roundId={selected.id} readOnly={readOnly || selected.archived === true || selected.status !== 'grading'} /><PSAssignments key={`assignments:${selected.id}:${selected.configuration_version}`} round={selected} readOnly={readOnly} onChange={() => load(cycleId)} /></div>
+          <div hidden={panel !== 'settings'} className="space-y-5"><RoundEditor key={`settings:${selected.id}:${selected.configuration_version}`} round={selected} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/rounds/${selected.id}`, body, 'PATCH'); setSelected(saved) })} onArchive={() => action(() => requestJson(`/api/ps/rounds/${selected.id}`, { configuration_version: selected.configuration_version, archived: !selected.archived }, 'PATCH'))} />{selected.grading_access === 'open' ? <p className="rounded-xl border border-[var(--border)] p-5 text-sm">Open grading: there&apos;s nothing to assign. Start grading from <span className="font-semibold">Reviews &amp; progression</span>, and graders pick candidates on the grading page.</p> : <><PSReassignment key={`reassignment:${selected.id}`} roundId={selected.id} readOnly={readOnly || selected.archived === true || selected.status !== 'grading'} /><PSAssignments key={`assignments:${selected.id}:${selected.configuration_version}`} round={selected} readOnly={readOnly} onChange={() => load(cycleId)} /></>}</div>
           <div hidden={panel !== 'reviews'} className="space-y-5"><PSProgressBoard key={`progress:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} onChange={() => load(cycleId)} /><PSProgression key={`progression:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} firstRound={rounds.find(r => !r.archived)?.id === selected.id} onChange={() => load(cycleId)} /><PSReviewHistory key={`history:${selected.id}`} roundId={selected.id} /></div>
         </>}
       </div>}
@@ -111,6 +111,8 @@ function RoundEditor({ round, users, disabled, onSave, onArchive }: { round: Rou
   const [n, setN] = useState(round?.reviews_required ?? 1)
   const [emails, setEmails] = useState(round?.eligible_grader_emails ?? [])
   const [mode, setMode] = useState(round?.assignment_mode ?? 'individual'), [pairs, setPairs] = useState(round?.interviewer_pairs ?? [])
+  // New rounds default to open grading; existing rounds keep what they were created with.
+  const [access, setAccess] = useState(round ? round.grading_access ?? 'assigned' : 'open')
   const paired = new Set(pairs.flatMap(p => p.emails))
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; graders?: string; reviews?: string }>({})
   function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -120,15 +122,16 @@ function RoundEditor({ round, users, disabled, onSave, onArchive }: { round: Rou
     if (!emails.length) errors.graders = 'Select at least one grader for this round.'
     if (!Number.isInteger(n) || n < 1) errors.reviews = 'Enter a whole number of reviews, starting at 1.'
     else if (mode === 'individual' && emails.length && n > emails.length) errors.reviews = `Select at least ${n} graders, or reduce the reviews required.`
-    else if (mode === 'pair' && n > Math.max(pairs.length, 1)) errors.reviews = `Add at least ${n} pairs, or lower the pairs per candidate.`
-    if (mode === 'pair' && pairs.some(p => p.emails.length < 2 || p.emails.some(e => !emails.includes(e)))) errors.graders = 'Every pair needs two eligible graders.'
+    else if (mode === 'pair' && access === 'assigned' && n > Math.max(pairs.length, 1)) errors.reviews = `Add at least ${n} pairs, or lower the pairs per candidate.`
+    else if (access === 'open' && emails.length && n > emails.length) errors.reviews = `Select at least ${n} graders, or reduce the evaluations required.`
+    if (mode === 'pair' && access === 'assigned' && pairs.some(p => p.emails.length < 2 || p.emails.some(e => !emails.includes(e)))) errors.graders = 'Every pair needs two eligible graders.'
     setFieldErrors(errors)
     if (Object.keys(errors).length) {
       const input = e.currentTarget.querySelector<HTMLInputElement>(errors.name ? 'input[name=roundName]' : errors.graders ? 'input[type=checkbox]:not(:disabled)' : 'input[name=reviewsRequired]')
       input?.focus()
       return
     }
-    void onSave({ name: name.trim(), evaluation_type: type, reviews_required: n, eligible_grader_emails: emails, assignment_mode: mode, interviewer_pairs: mode === 'pair' ? pairs : [], configuration_version: round?.configuration_version })
+    void onSave({ name: name.trim(), evaluation_type: type, reviews_required: n, eligible_grader_emails: emails, assignment_mode: mode, grading_access: access, interviewer_pairs: mode === 'pair' && access === 'assigned' ? pairs : [], configuration_version: round?.configuration_version })
   }
   // Graders, pairs and counts stay editable during grading; the round type and mode freeze once work exists.
   const settingsLocked = disabled || round?.status === 'ended'
@@ -139,16 +142,20 @@ function RoundEditor({ round, users, disabled, onSave, onArchive }: { round: Rou
     <label className="block">Evaluation type<select className={inputClass} disabled={kindLocked} value={type} onChange={e => setType(e.target.value as typeof type)}>{EVALUATION_TYPES.map(t => <option key={t} value={t}>{t.replaceAll('_', ' ')}</option>)}</select></label>
     <fieldset disabled={settingsLocked} aria-describedby="round-graders-help"><legend>Eligible graders ({emails.length})</legend><div className="max-h-48 overflow-auto space-y-2 p-2">{users.map(u => <label key={u.email} className="flex gap-2 text-sm"><input type="checkbox" checked={emails.includes(u.email)} onChange={e => { setEmails(e.target.checked ? [...emails, u.email] : emails.filter(email => email !== u.email)); setFieldErrors(previous => ({ ...previous, graders: undefined, reviews: undefined })) }} />{u.email} · {u.role}</label>)}</div></fieldset>
     <p id="round-graders-help" role={fieldErrors.graders ? "alert" : undefined} className={`text-sm ${fieldErrors.graders ? "text-red-500" : "text-[var(--text-muted)]"}`}>{fieldErrors.graders ?? (emails.length ? `${emails.length} grader${emails.length === 1 ? "" : "s"} selected.` : "Choose at least one person who can grade this round.")}</p>
+    <fieldset disabled={kindLocked} className="space-y-1"><legend>How graders get candidates</legend>
+      <label className="flex gap-2 items-center text-sm"><input type="radio" checked={access === 'open'} onChange={() => setAccess('open')} />Open: graders pick candidates from the full list (best for in-person interviews)</label>
+      <label className="flex gap-2 items-center text-sm"><input type="radio" checked={access === 'assigned'} onChange={() => setAccess('assigned')} />Assigned: the tool spreads candidates evenly across graders</label>
+    </fieldset>
     <fieldset disabled={kindLocked} className="space-y-1"><legend>Who grades each candidate</legend>
       <label className="flex gap-2 items-center text-sm"><input type="radio" checked={mode === 'individual'} onChange={() => setMode('individual')} />Individual graders, each submits their own form</label>
-      <label className="flex gap-2 items-center text-sm"><input type="radio" checked={mode === 'pair'} onChange={() => setMode('pair')} />Interviewer pairs, one form per pair</label>
+      <label className="flex gap-2 items-center text-sm"><input type="radio" checked={mode === 'pair'} onChange={() => setMode('pair')} />Interviewer pairs, one form per pair{access === 'open' && ' (the grader names their co-interviewer on the form)'}</label>
     </fieldset>
-    {mode === 'pair' && <fieldset disabled={settingsLocked} className="space-y-2"><legend>Interviewer pairs ({pairs.length})</legend>
+    {mode === 'pair' && access === 'assigned' && <fieldset disabled={settingsLocked} className="space-y-2"><legend>Interviewer pairs ({pairs.length})</legend>
       {pairs.map((pair, i) => <div key={pair.id} className="flex flex-wrap gap-2 items-center">{[0, 1].map(slot => <label key={slot} className="flex-1 min-w-40"><span className="sr-only">Pair {i + 1} interviewer {slot + 1}</span><select className={inputClass} value={pair.emails[slot] ?? ''} onChange={e => setPairs(pairs.map(p => p.id === pair.id ? { ...p, emails: Object.assign([...p.emails], { [slot]: e.target.value }).filter(Boolean) } : p))}><option value="">Choose interviewer</option>{emails.filter(email => email === pair.emails[slot] || !paired.has(email)).map(email => <option key={email} value={email}>{email}</option>)}</select></label>)}<button type="button" className={buttonClass} aria-label={`Remove pair ${i + 1}`} onClick={() => setPairs(pairs.filter(p => p.id !== pair.id))}>Remove</button></div>)}
       <button type="button" className={buttonClass} disabled={emails.filter(e => !paired.has(e)).length < 2} onClick={() => setPairs([...pairs, { id: crypto.randomUUID(), emails: [] }])}>+ Add pair</button>
       <p className="text-sm text-[var(--text-muted)]">Pick pairs from the eligible graders above. Each person can be in one pair. Removing a pair releases only its unstarted interviews.</p>
     </fieldset>}
-    <label className="block">{mode === 'pair' ? 'Pairs per candidate' : 'Reviews required per applicant'}<input name="reviewsRequired" type="number" min={1} max={mode === 'pair' ? Math.max(pairs.length, 1) : emails.length || 1} disabled={settingsLocked} className={inputClass} aria-invalid={!!fieldErrors.reviews} aria-describedby={fieldErrors.reviews ? "round-reviews-error" : undefined} value={n || ""} onChange={e => { setN(Number(e.target.value)); setFieldErrors(previous => ({ ...previous, reviews: undefined })) }} /></label>
+    <label className="block">{mode === 'pair' ? (access === 'open' ? 'Evaluations per candidate' : 'Pairs per candidate') : 'Reviews required per applicant'}<input name="reviewsRequired" type="number" min={1} max={mode === 'pair' && access === 'assigned' ? Math.max(pairs.length, 1) : emails.length || 1} disabled={settingsLocked} className={inputClass} aria-invalid={!!fieldErrors.reviews} aria-describedby={fieldErrors.reviews ? "round-reviews-error" : undefined} value={n || ""} onChange={e => { setN(Number(e.target.value)); setFieldErrors(previous => ({ ...previous, reviews: undefined })) }} /></label>
     {round?.configuration_locked && <p role="status" className="text-sm">Grading has begun. You can still change graders, pairs and reviews per candidate; preview and generate assignments again to apply them. The round type and assignment mode are frozen.</p>}
     {emails.filter(email => !users.some(u => u.email === email)).map(email => <p key={email} className="text-sm">{email} is selected in this round but is no longer authorized. Access administration must resolve this before assignment generation.</p>)}
     {fieldErrors.reviews && <p id="round-reviews-error" role="alert" className="text-sm text-red-500">{fieldErrors.reviews}</p>}
@@ -167,7 +174,7 @@ function StandardSetup({ users, disabled, onCreate }: { users: AuthorizedUser[];
     <fieldset disabled={disabled}><legend className="text-sm">Graders ({emails.length})</legend><div className="max-h-48 overflow-auto space-y-2 p-2">{users.map(u => <label key={u.email} className="flex gap-2 text-sm"><input type="checkbox" checked={emails.includes(u.email)} onChange={e => setEmails(e.target.checked ? [...emails, u.email] : emails.filter(x => x !== u.email))} />{u.email} · {u.role}</label>)}</div>
       <button type="button" className="text-sm underline" onClick={() => setEmails(users.map(u => u.email))}>Select everyone</button></fieldset>
     <label className="block text-sm max-w-xs">Reviewers per applicant in the Written App round<input type="number" min={1} className={inputClass} disabled={disabled} value={n || ''} onChange={e => setN(Number(e.target.value))} /></label>
-    <p className="text-sm text-[var(--text-muted)]">Interview rounds use one form per interviewer pair.</p>
+    <p className="text-sm text-[var(--text-muted)]">All three rounds use open grading: graders pick the candidates they read or interviewed. Interview forms record a co-interviewer.</p>
     {problem && <p className="text-sm">{problem}</p>}
     <button className={buttonClass} disabled={disabled || !!problem} onClick={() => void onCreate({ eligible_grader_emails: emails, reviews_required: n })}>Create the three rounds</button>
   </section>

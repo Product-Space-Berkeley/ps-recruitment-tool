@@ -33,7 +33,7 @@ export async function candidateProfile(applicantId: string) {
     const evaluations = current.filter(e => String(e.round_id) === String(round._id)).map(e => ({
       id: String(e._id), submitted_by: e.grader_email, panel_emails: e.panel_emails ?? null, revision: e.revision, submitted_at: e.submitted_at,
       score: e.score, max_points: e.max_points ?? null, percent: e.percent ?? null, bonus_points: e.bonus_points ?? null, penalty_points: e.penalty_points ?? null,
-      section_totals: e.section_totals ?? [], responses: e.responses, comments: e.comments, rubric_version_id: String(e.rubric_version_id),
+      section_totals: e.section_totals ?? [], responses: e.responses, comments: e.comments, rubric_version_id: String(e.rubric_version_id), knows_candidate: !!e.knows_candidate,
     }))
     timeline.push({
       round: { id: String(round._id), name: round.name, status: round.status, order_index: round.order_index, assignment_mode: round.assignment_mode ?? 'individual', reviews_required: round.reviews_required },

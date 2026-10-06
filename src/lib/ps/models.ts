@@ -124,6 +124,7 @@ const PSEvaluationRevisionSchema = new Schema({
   max_points: { type: Number, default: null }, percent: { type: Number, default: null }, criteria_points: { type: Number, default: null }, bonus_points: { type: Number, default: null }, penalty_points: { type: Number, default: null },
   section_totals: { type: [new Schema({ category_id: String, points: Number, max: Number }, { _id: false })], default: undefined }, applicant_year: { type: String, default: null },
   panel_emails: { type: [String], default: undefined }, // pair rounds: everyone credited with this evaluation
+  knows_candidate: { type: Boolean, default: false }, // grader flagged a personal connection to this candidate
 })
 PSEvaluationRevisionSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1, revision: 1 }, { unique: true })
 PSEvaluationRevisionSchema.index({ grader_email: 1, round_id: 1 })

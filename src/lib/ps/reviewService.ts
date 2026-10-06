@@ -19,12 +19,29 @@ export async function submitReview(body: Record<string, unknown>, actor: string)
     const round = await lockRound(roundId, tx)
     if (round.status !== 'grading') throw new WorkflowError('This round is not open for grading.', 409)
     if (!round.rubric_version_id) throw new WorkflowError('Rubric not configured.', 409)
-    // Pair rounds share one evaluation per pair: either interviewer may submit or revise it.
-    const mine = await GraderAssignment.findOne({ round_id: roundId, applicant_id: applicantId, grader_email: actor }).session(tx).lean()
-    const panel = round.assignment_mode === 'pair' && mine?.panel_id ? (await GraderAssignment.find({ round_id: roundId, applicant_id: applicantId, panel_id: mine.panel_id }).session(tx).lean()) : null
-    const panelEmails = panel ? panel.map(a => a.grader_email).sort() : null
-    const contribution = await PSEvaluationContribution.findOne({ round_id: roundId, applicant_id: applicantId, grader_email: panelEmails ? mongoose.trusted({ $in: panelEmails }) : actor }).session(tx).lean()
-    const prior = contribution ? await PSEvaluationRevision.findById(contribution.evaluation_id).session(tx).lean() : null
+    const open = round.grading_access === 'open'
+    type Row = { _id: unknown; grader_email: string; panel_id?: string | null }
+    let mine: Row | null = null, panel: Row[] | null = null, panelEmails: string[] | null = null
+    let contribution: { _id: unknown; grader_email: string; evaluation_id: unknown; revision: number } | null = null
+    let prior: { _id: unknown; rubric_version_id: unknown; panel_emails?: string[] } | null = null
+    if (open) {
+      // Open rounds: whoever graded (or co-interviewed) owns the evaluation; no assignment is needed.
+      const co = coInterviewer(body.co_interviewer, round, actor)
+      const existing = await PSEvaluationContribution.find({ round_id: roundId, applicant_id: applicantId }).session(tx).lean()
+      const currents = await PSEvaluationRevision.find({ _id: mongoose.trusted({ $in: existing.map(c => c.evaluation_id) }) }).select('grader_email panel_emails').session(tx).lean()
+      const credits = (c: { grader_email: string; evaluation_id: unknown }, email: string) => c.grader_email === email || !!currents.find(e => String(e._id) === String(c.evaluation_id))?.panel_emails?.includes(email)
+      contribution = existing.find(c => credits(c, actor)) ?? null
+      if (co && existing.some(c => c !== contribution && credits(c, co))) throw new WorkflowError(`${co} already has an evaluation for this candidate. Open theirs to update it, or choose a different co-interviewer.`, 409)
+      prior = contribution ? await PSEvaluationRevision.findById(contribution.evaluation_id).session(tx).lean() : null
+      panelEmails = co ? [actor, co].sort() : prior?.panel_emails?.length ? prior.panel_emails : null
+    } else {
+      // Assigned pair rounds share one evaluation per pair: either interviewer may submit or revise it.
+      mine = await GraderAssignment.findOne({ round_id: roundId, applicant_id: applicantId, grader_email: actor }).session(tx).lean()
+      panel = round.assignment_mode === 'pair' && mine?.panel_id ? (await GraderAssignment.find({ round_id: roundId, applicant_id: applicantId, panel_id: mine.panel_id }).session(tx).lean()) : null
+      panelEmails = panel ? panel.map(a => a.grader_email).sort() : null
+      contribution = await PSEvaluationContribution.findOne({ round_id: roundId, applicant_id: applicantId, grader_email: panelEmails ? mongoose.trusted({ $in: panelEmails }) : actor }).session(tx).lean()
+      prior = contribution ? await PSEvaluationRevision.findById(contribution.evaluation_id).session(tx).lean() : null
+    }
     const requested = String(body.rubric_version_id ?? '')
     if (requested !== String(round.rubric_version_id) && requested !== String(prior?.rubric_version_id)) throw new WorkflowError('Published rubric changed. Reload the grading form.', 409)
     const rubric = await RubricVersion.findOne({ _id: requested, round_id: roundId }).session(tx).lean()
@@ -32,22 +49,24 @@ export async function submitReview(body: Record<string, unknown>, actor: string)
     const enrollment = await CandidateRound.findOne({ round_id: roundId, applicant_id: applicantId }).session(tx).lean()
     if (!enrollment) throw new WorkflowError('Applicant is not enrolled.', 409)
     const assignment = mine
-    validateReviewAccess({ actor, assignedTo: assignment?.grader_email ?? null, state: enrollment.state, rubricId: String(rubric._id), submittedRubricId: body.rubric_version_id })
-    if (!round.eligible_grader_emails.includes(actor)) throw new WorkflowError('You are not eligible for this round.', 403)
-    if (round.assignment_mode === 'pair' && !isPoints(rubric)) throw new WorkflowError('Interviewer pair rounds need a points rubric. Publish one before grading.', 409)
+    if (!round.eligible_grader_emails.includes(actor)) throw new WorkflowError('You are not eligible to grade this round.', 403)
+    validateReviewAccess({ actor, assignedTo: open ? actor : assignment?.grader_email ?? null, state: enrollment.state, rubricId: String(rubric._id), submittedRubricId: body.rubric_version_id })
+    if ((round.assignment_mode === 'pair' || open) && !isPoints(rubric)) throw new WorkflowError('This round needs a points rubric. Publish one before grading.', 409)
+    if (body.knows_candidate !== undefined && typeof body.knows_candidate !== 'boolean') throw new WorkflowError('Choose whether you know this candidate.')
     if (isWeighted(rubric) || isPoints(rubric)) {
       if (body.schema_version !== 2) throw new WorkflowError('Review schema must match the published rubric.')
       const expected = body.revision ?? 0
       if (!Number.isInteger(expected) || expected !== (contribution?.revision ?? 0)) throw new WorkflowError('Your evaluation changed. Reload it before updating.', 409)
       const calculated = isPoints(rubric) ? await pointsFields(rubric as unknown as Structure, body.responses, applicantId, tx) : scoreEvaluation(rubric as unknown as Structure, body.responses)
       const legacy = await GenericReview.exists({ round_id: roundId, applicant_id: applicantId, grader_email: actor }).session(tx)
-      const [evaluation] = await PSEvaluationRevision.create([{ round_id: roundId, applicant_id: applicantId, grader_email: actor, rubric_version_id: rubric._id, scoring_configuration_id: rubric.scoring_configuration_id, schema_version: 2, revision: Number(expected) + 1, supersedes_id: prior?._id ?? null, rubric_snapshot: serialize(rubric), ...calculated, ...(panelEmails ? { panel_emails: panelEmails } : {}), comments: body.comments }], { session: tx })
+      const [evaluation] = await PSEvaluationRevision.create([{ round_id: roundId, applicant_id: applicantId, grader_email: actor, rubric_version_id: rubric._id, scoring_configuration_id: rubric.scoring_configuration_id, schema_version: 2, revision: Number(expected) + 1, supersedes_id: prior?._id ?? null, rubric_snapshot: serialize(rubric), ...calculated, ...(panelEmails ? { panel_emails: panelEmails } : {}), knows_candidate: body.knows_candidate === true, comments: body.comments }], { session: tx })
       if (contribution) {
         const updated = await PSEvaluationContribution.updateOne({ _id: contribution._id, revision: expected }, { $set: { evaluation_id: evaluation._id, revision: Number(expected) + 1 } }, { session: tx })
         if (!updated.modifiedCount) throw new WorkflowError('Your evaluation changed. Reload it before updating.', 409)
       } else {
         await PSEvaluationContribution.create([{ round_id: roundId, applicant_id: applicantId, grader_email: actor, evaluation_id: evaluation._id, revision: 1 }], { session: tx })
-        if (!legacy) {
+        if (open) await Round.updateOne({ _id: roundId }, { $inc: { review_submission_count: 1 } }, { session: tx })
+        else if (!legacy) {
           // In pair rounds every member's row is marked complete so neither is asked again.
           const rows = panel ? panel.map(a => a._id) : [assignment!._id]
           const guard = await GraderAssignment.updateMany({ _id: mongoose.trusted({ $in: rows }) }, { $inc: { submission_count: 1 } }, { session: tx })
@@ -80,4 +99,14 @@ async function pointsFields(rubric: Structure, responses: unknown, applicantId: 
   const year = applicant?.year ?? null
   const result = scorePoints(rubric, responses, year)
   return { responses: result.responses, question_results: result.question_results.map(r => ({ ...r, raw_score: r.points })), score: result.total, max_points: result.max, percent: result.percent, criteria_points: result.criteria, bonus_points: result.bonus, penalty_points: result.penalty, section_totals: result.section_totals, applicant_year: year }
+}
+// Open interview rounds: the grader names who interviewed with them. Individual rounds take no co-interviewer.
+function coInterviewer(input: unknown, round: { assignment_mode?: string; eligible_grader_emails: string[] }, actor: string) {
+  if (input === undefined || input === null || input === '') return null
+  if (round.assignment_mode !== 'pair') throw new WorkflowError('This round is graded individually; remove the co-interviewer.')
+  if (typeof input !== 'string') throw new WorkflowError('Choose a co-interviewer from the list.')
+  const email = input.trim().toLowerCase()
+  if (email === actor) throw new WorkflowError('Choose someone other than yourself as co-interviewer.')
+  if (!round.eligible_grader_emails.includes(email)) throw new WorkflowError('Your co-interviewer must be an eligible grader for this round.')
+  return email
 }

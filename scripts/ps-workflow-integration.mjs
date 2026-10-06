@@ -11,7 +11,7 @@ const directory = await mkdtemp(join(tmpdir(), 'ps-db-test-'))
 let repl
 try {
   await symlink(resolve('node_modules'), join(directory, 'node_modules'), 'dir')
-  const sources = ['src/lib/models/index.ts', 'src/lib/mongooseConfig.ts', ...['models', 'domain', 'records', 'rounds', 'assignments', 'assignmentService', 'enrollment', 'rubrics', 'rubricService', 'reviewService', 'scoring', 'rubricV2', 'rubricCompatibility', 'rubricDraftService', 'rubricImport', 'weightedRubric', 'points', 'templates', 'candidateScores', 'scoreService', 'roundLifecycle', 'candidateProfile'].map(n => `src/lib/ps/${n}.ts`)]
+  const sources = ['src/lib/models/index.ts', 'src/lib/mongooseConfig.ts', ...['models', 'domain', 'records', 'rounds', 'assignments', 'assignmentService', 'enrollment', 'rubrics', 'rubricService', 'reviewService', 'scoring', 'rubricV2', 'rubricCompatibility', 'rubricDraftService', 'rubricImport', 'weightedRubric', 'points', 'templates', 'candidateScores', 'scoreService', 'roundLifecycle', 'candidateProfile', 'gradingRoster'].map(n => `src/lib/ps/${n}.ts`)]
   const outputs = new Map(sources.map((s, i) => [resolve(s), join(directory, `module-${i}.mjs`)]))
   for (const sourcePath of sources) {
     const source = (await readFile(sourcePath, 'utf8')).replace("import mongoose, { Schema, model, models } from 'mongoose'", "import mongoose from 'mongoose'; const { Schema, model, models } = mongoose").replace("import { Schema, model, models } from 'mongoose'", "import mongoose from 'mongoose'; const { Schema, model, models } = mongoose")
@@ -284,8 +284,13 @@ try {
   const v1 = await draftService.publishDraft(String(writtenDraft._id), { revision: 0, configuration_version: (await rounds.psRound(writtenRound.id)).configuration_version }, 'lead@example.test')
   assert.equal((await ps.RubricScoringConfiguration.findById(v1.scoring_configuration_id)).engine, 'points_v1')
   assert.deepEqual((await ps.RubricVersion.findById(v1.id)).categories.find(c => c.id === 'resume_freshman').show_for_years, ['Freshman'])
-  const preview = await assignments.previewAssignments(writtenRound.id); await assignments.generateAssignments(writtenRound.id, preview.preview_token, 'lead@example.test')
-  const graderFor = async applicant => (await core.GraderAssignment.find({ round_id: writtenRound.id, applicant_id: applicant._id }).lean()).map(a => a.grader_email)
+  // Standard rounds use open grading: no assignments; any eligible grader can evaluate any candidate.
+  const lifecycleEarly = await load('src/lib/ps/roundLifecycle.ts')
+  await assert.rejects(() => assignments.previewAssignments(writtenRound.id), e => e.status === 409 && /open grading/.test(e.message))
+  assert.equal((await lifecycleEarly.startOpenRound(writtenRound.id, 'lead@example.test')).candidates, 3)
+  await assert.rejects(() => lifecycleEarly.startOpenRound(writtenRound.id, 'lead@example.test'), e => e.status === 409)
+  assert.equal(await core.GraderAssignment.countDocuments({ round_id: writtenRound.id }), 0)
+  const graderFor = async () => graders.slice(0, 2)
   const answer = (ids, value) => ids.map(question_id => ({ question_id, format: 'numeric_choice', value }))
   const shared = [...answer(['q1_specificity', 'q1_reflection', 'q2_personality'], 2), ...answer(['notes_show_up', 'notes_contribute'], 1)]
   const freshAnswers = [...answer(['fr_initiative', 'fr_impact'], 3), ...answer(['fr_overcommitted'], -1), ...answer(['fr_exaggerated'], 0), ...shared]
@@ -323,7 +328,8 @@ try {
   const progress = await lifecycle.roundProgress(writtenRound.id)
   assert.deepEqual([progress.candidates, progress.ready, progress.evaluations_done, progress.evaluations_needed], [3, 1, 3, 6])
   assert.deepEqual(progress.incomplete.map(c => c.name).sort(), ['Jun Points', 'Unknown Points'])
-  assert.ok(progress.graders.every(g => g.assigned >= g.done && g.remaining >= 0))
+  assert.equal(progress.grading_access, 'open')
+  assert.deepEqual(progress.graders.map(g => [g.grader, g.done, g.assigned, g.remaining]), [[graders[2], 0, null, null], [graders[1], 1, null, null], [graders[0], 2, null, null]], 'open rounds list every eligible grader, fewest evaluations first')
   await assert.rejects(() => lifecycle.closeRound(writtenRound.id, {}, 'lead@example.test'), e => e.status === 409 && /2 candidates are still waiting/.test(e.message))
   const closed = await lifecycle.closeRound(writtenRound.id, { override: true }, 'lead@example.test')
   assert.deepEqual([closed.frozen, closed.incomplete], [3, 2])
@@ -423,6 +429,52 @@ try {
   assert.equal((await ps.CandidateRound.findOne({ round_id: pd.id, applicant_id: pairApps[0]._id })).state, 'ready_for_deliberation')
   await assert.rejects(() => rounds.updateRound(pd.id, { assignment_mode: 'individual', configuration_version: current.configuration_version }), e => e.status === 409, 'mode freezes after activity')
   console.log('Interviewer pairs: shared evaluations, partner revisions, concurrent submissions, pair reassignment and mid-round N changes passed.')
+  }
+  {
+  // Open grading for in-person interviews: graders pick candidates and name their co-interviewer.
+  const templates = await load('src/lib/ps/templates.ts'), lifecycle = await load('src/lib/ps/roundLifecycle.ts'), roster = await load('src/lib/ps/gradingRoster.ts')
+  const people = ['oa@example.test', 'ob@example.test', 'oc@example.test']
+  await core.AuthorizedUser.insertMany([...people, 'outsider@example.test'].map(email => ({ email, role: 'grader' })))
+  const openCycle = await core.RecruitmentCycle.create({ name: 'Open grading' })
+  const [ana, ben] = await core.Applicant.insertMany(['Ana', 'Ben'].map((first_name, i) => ({ cycle_id: openCycle._id, first_name, last_name: 'Open', email: `open${i}@example.test`, year: 'Sophomore' })))
+  const [written, pd] = await rounds.createStandardRounds(String(openCycle._id), { eligible_grader_emails: people, reviews_required: 2 }, 'lead@example.test')
+  assert.ok([written, pd].every(r => r.grading_access === 'open'))
+  await assert.rejects(() => lifecycle.startOpenRound(pd.id, 'lead@example.test'), e => e.status === 409 && /Publish a rubric/.test(e.message))
+  const publish = async round => { const d = await ps.RubricDraft.findOne({ round_id: round.id }).lean(); return draftService.publishDraft(String(d._id), { revision: 0, configuration_version: (await rounds.psRound(round.id)).configuration_version }, 'lead@example.test') }
+  await publish(written); const pdVersion = await publish(pd)
+  await lifecycle.startOpenRound(written.id, 'lead@example.test')
+  for (const app of [ana, ben]) await enrollment.decideEnrollment(written.id, String(app._id), 'advance', 'lead@example.test')
+  assert.equal((await lifecycle.startOpenRound(pd.id, 'lead@example.test')).candidates, 2, 'later rounds fill as candidates are advanced')
+  const answers = templates.pdInterviewTemplate().questions.map(q => q.format === 'numeric_choice' ? { question_id: q.id, format: q.format, value: q.purpose === 'RED_FLAG' ? 0 : Math.max(...q.options.map(o => o.value)) } : { question_id: q.id, format: q.format, value: q.format === 'url' ? 'https://docs.example.test/open' : q.format === 'single_choice' ? q.options[0].value : 'Good.' })
+  const submit = (app, extra = {}) => ({ round_id: pd.id, applicant_id: String(app._id), rubric_version_id: pdVersion.id, schema_version: 2, revision: 0, responses: answers, comments: '', ...extra })
+  await assert.rejects(() => reviews.submitReview(submit(ana), 'outsider@example.test'), e => e.status === 403)
+  await assert.rejects(() => reviews.submitReview(submit(ana, { co_interviewer: people[0] }), people[0]), e => /other than yourself/.test(e.message))
+  await assert.rejects(() => reviews.submitReview(submit(ana, { co_interviewer: 'outsider@example.test' }), people[0]), e => /eligible grader/.test(e.message))
+  const shared = await reviews.submitReview(submit(ana, { co_interviewer: people[1], knows_candidate: true }), people[0])
+  assert.deepEqual([shared.panel_emails, shared.knows_candidate, shared.score], [[people[0], people[1]], true, 41])
+  assert.equal(await core.GraderAssignment.countDocuments({ round_id: pd.id }), 0, 'open grading never creates assignments')
+  await assert.rejects(() => reviews.submitReview(submit(ana), people[1]), e => e.status === 409, 'the co-interviewer updates the shared form instead of adding another')
+  const partnerUpdate = await reviews.submitReview(submit(ana, { revision: 1, comments: 'Partner adds notes' }), people[1])
+  assert.deepEqual([partnerUpdate.revision, partnerUpdate.panel_emails], [2, [people[0], people[1]]], 'the pair stays credited when the partner updates without renaming')
+  await assert.rejects(() => reviews.submitReview(submit(ana, { co_interviewer: people[0] }), people[2]), e => e.status === 409 && /already has an evaluation/.test(e.message))
+  const solo = await reviews.submitReview(submit(ana), people[2])
+  assert.equal(solo.panel_emails, undefined)
+  assert.equal((await ps.CandidateRound.findOne({ round_id: pd.id, applicant_id: ana._id })).state, 'ready_for_deliberation', 'interview rounds need one evaluation per candidate')
+  await assert.rejects(() => reviews.submitReview({ ...submit(ben, { co_interviewer: people[1] }) }, people[0]).then(() => reviews.submitReview(submit(ben, { co_interviewer: people[0] }), people[1])), e => e.status === 409)
+  // The roster shows everyone, each grader's own evaluation, and never other graders' scores.
+  const forB = await roster.gradingRoster(pd.id, people[1])
+  assert.deepEqual(forB.candidates.map(c => [c.name, c.evaluations, c.status, !!c.mine]), [['Ana Open', 2, 'reviewed', true], ['Ben Open', 1, 'reviewed', true]])
+  const forC = await roster.gradingRoster(pd.id, people[2])
+  assert.equal(forC.candidates.find(c => c.name === 'Ben Open').mine, null)
+  assert.ok(!JSON.stringify(forC.candidates.find(c => c.name === 'Ben Open')).includes('"score"'), 'no one else\'s score reaches a grader')
+  assert.deepEqual(forB.co_interviewers, [people[0], people[2]])
+  await assert.rejects(() => roster.gradingRoster(pd.id, 'outsider@example.test'), e => e.status === 403)
+  const progress = await lifecycle.roundProgress(pd.id)
+  assert.deepEqual(progress.graders.map(g => [g.grader, g.done]), [[people[2], 1], [people[0], 2], [people[1], 2]])
+  await lifecycle.closeRound(pd.id, { override: true }, 'lead@example.test')
+  await assert.rejects(() => roster.gradingRoster(pd.id, people[1]), e => e.status === 409 && /closed for grading/.test(e.message))
+  await assert.rejects(() => lifecycle.reopenRound(written.id), e => e.status === 409)
+  console.log('Open grading: start, later-round fill, co-interviewer credit and updates, conflicts, roster privacy and progress passed.')
   }
   console.log('V2 draft CAS, publication concurrency/snapshot/immutability, raw typed responses, evidence boundaries and V1 copying checks passed.')
   console.log('PS Mongo transaction, review persistence, rubric freezing, enrollment history and idempotent progression checks passed.')

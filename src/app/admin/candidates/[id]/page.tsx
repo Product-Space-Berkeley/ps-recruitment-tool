@@ -4,7 +4,7 @@ import { use, useEffect, useState } from 'react'
 import { requestJson } from '@/lib/ps/client'
 import type { Category, Question, ResponseValue } from '@/lib/ps/rubricV2'
 type Score = { complete: boolean; score: number | null; percent: number | null; low: number | null; high: number | null; max_points: number | null; reviews: number; required: number; frozen: boolean; frozen_at?: string } | null
-type Evaluation = { id: string; submitted_by: string; panel_emails: string[] | null; revision: number; submitted_at: string; score: number; max_points: number | null; percent: number | null; section_totals: { category_id: string; points: number; max: number }[]; responses: { question_id: string; value: ResponseValue }[]; comments: string; rubric_version_id: string }
+type Evaluation = { id: string; submitted_by: string; panel_emails: string[] | null; revision: number; submitted_at: string; score: number; max_points: number | null; percent: number | null; section_totals: { category_id: string; points: number; max: number }[]; responses: { question_id: string; value: ResponseValue }[]; comments: string; rubric_version_id: string; knows_candidate?: boolean }
 type Stage = { round: { id: string; name: string; status: string; assignment_mode: string; reviews_required: number }; enrolled: boolean; state: string | null; decision_by: string | null; decision_at: string | null; events: { action: string; actor: string; at: string }[]; score: Score; evaluations: Evaluation[]; revisions: number }
 type Profile = { applicant: { id: string; name: string; email: string; year: string | null; transfer: boolean; major: string | null; applied_at: string | null }; cycle: { id: string; name: string } | null; current_round: string | null; timeline: Stage[]; rubrics: { id: string; name: string; version: number; categories: Category[]; questions: Question[] }[] }
 const STATES: Record<string, string> = { pending: 'Not started', in_review: 'In review', ready_for_deliberation: 'Ready to decide', advanced: 'Advanced', hold: 'On hold', rejected: 'Rejected', accepted: 'Accepted' }
@@ -19,7 +19,7 @@ function answer(q: Question | undefined, value: ResponseValue) {
 function EvaluationCard({ e, rubric }: { e: Evaluation; rubric?: Profile['rubrics'][number] }) {
   const by = e.panel_emails ? e.panel_emails.join(' & ') : e.submitted_by
   return <details className="rounded-lg border border-[var(--border)] p-3">
-    <summary className="cursor-pointer text-sm flex flex-wrap justify-between gap-2"><span>{by}</span><span className="tabular-nums">{e.max_points != null ? `${e.score} / ${e.max_points} pts` : `${e.score.toFixed(2)} / 3`}</span></summary>
+    <summary className="cursor-pointer text-sm flex flex-wrap justify-between gap-2"><span>{by}{e.knows_candidate && <span className="ml-2 rounded-full border border-amber-400 px-2 text-xs text-amber-300">Knows candidate</span>}</span><span className="tabular-nums">{e.max_points != null ? `${e.score} / ${e.max_points} pts` : `${e.score.toFixed(2)} / 3`}</span></summary>
     <p className="text-xs text-[var(--text-muted)] mt-2">{rubric ? `${rubric.name} v${rubric.version}` : 'Rubric'} · submitted {new Date(e.submitted_at).toLocaleString()}{e.revision > 1 ? ` · revision ${e.revision}` : ''}</p>
     {rubric?.categories.map(c => {
       const answers = e.responses.filter(r => rubric.questions.find(q => q.id === r.question_id)?.category_id === c.id)

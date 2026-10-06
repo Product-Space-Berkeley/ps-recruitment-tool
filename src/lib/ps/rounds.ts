@@ -54,7 +54,7 @@ export async function createRound(cycleId: string, body: Record<string, unknown>
   return result
 }
 export async function updateRound(id: string, body: Record<string, unknown>) {
-  const allowed = new Set(['name', 'evaluation_type', 'reviews_required', 'eligible_grader_emails', 'assignment_mode', 'interviewer_pairs', 'archived', 'status', 'configuration_version'])
+  const allowed = new Set(['name', 'evaluation_type', 'reviews_required', 'eligible_grader_emails', 'assignment_mode', 'grading_access', 'interviewer_pairs', 'archived', 'status', 'configuration_version'])
   if (Object.keys(body).some(key => !allowed.has(key))) throw new WorkflowError('Unsupported round setting. Use the ordering or rubric endpoint for those changes; PS scoring is not configured.')
   if (typeof body.configuration_version !== 'number' || !Number.isInteger(body.configuration_version) || body.configuration_version < 0) throw new WorkflowError('A valid round configuration version is required.')
   if (Object.keys(body).every(key => key === 'configuration_version')) throw new WorkflowError('Supply a round setting to change.')
@@ -65,11 +65,11 @@ export async function updateRound(id: string, body: Record<string, unknown>) {
     if (body.configuration_version !== round.configuration_version) throw new WorkflowError('Configuration changed. Refresh before saving.', 409)
     if (round.status === 'ended') throw new WorkflowError('Ended rounds are read-only.', 409)
     if ('status' in body && body.status !== 'ended') throw new WorkflowError('Only ending grading is supported here; final decisions stay in the existing workflow.')
-    const config = validateConfiguration({ ...round, ...body })
+    const config = validateConfiguration({ ...round, grading_access: round.grading_access ?? 'assigned', ...body })
     // Graders, pairs and reviews per candidate stay adjustable during grading; generating again applies them.
     // What kind of round it is cannot change once work exists.
     const graderChange = JSON.stringify(config.eligible_grader_emails) !== JSON.stringify(round.eligible_grader_emails)
-    const kindChange = config.evaluation_type !== round.evaluation_type || config.assignment_mode !== (round.assignment_mode ?? 'individual')
+    const kindChange = config.evaluation_type !== round.evaluation_type || config.assignment_mode !== (round.assignment_mode ?? 'individual') || config.grading_access !== (round.grading_access ?? 'assigned')
     if (graderChange) await validateGraders(config.eligible_grader_emails, tx)
     if ((kindChange || body.archived === true) && await hasRoundActivity(id, tx)) throw new WorkflowError('The round type and assignment mode are frozen after enrollment or grading begins. Create a future round instead.', 409)
     if ('archived' in body && typeof body.archived !== 'boolean') throw new WorkflowError('Archived must be true or false.')
@@ -95,7 +95,7 @@ export async function reorderRounds(cycleId: string, ids: unknown, version: unkn
   })
 }
 // Creates PS's fixed sequence (Written App → PD → Final) with each FA26 form as an editable draft.
-// Interview rounds use interviewer pairs (one form per pair); leadership picks the pairs before assigning.
+// All three rounds use open grading: graders pick candidates. Interview rounds record a co-interviewer per form.
 export async function createStandardRounds(cycleId: string, body: Record<string, unknown>, actor: string) {
   objectId(cycleId)
   const first = validateConfiguration({ ...body, name: PS_STANDARD_ROUNDS[0].name, evaluation_type: PS_STANDARD_ROUNDS[0].evaluation_type })
@@ -109,7 +109,7 @@ export async function createStandardRounds(cycleId: string, body: Record<string,
     await validateGraders(first.eligible_grader_emails, tx)
     const last = await Round.findOne({ cycle_id: cycleId }).sort({ order_index: -1 }).session(tx).lean()
     for (const [i, standard] of PS_STANDARD_ROUNDS.entries()) {
-      const config = { ...first, name: standard.name, evaluation_type: standard.evaluation_type, reviews_required: i === 0 ? first.reviews_required : 1, assignment_mode: standard.assignment_mode, interviewer_pairs: [] }
+      const config = { ...first, name: standard.name, evaluation_type: standard.evaluation_type, reviews_required: i === 0 ? first.reviews_required : 1, assignment_mode: standard.assignment_mode, grading_access: 'open' as const, interviewer_pairs: [] }
       const [round] = await Round.create([{ ...config, cycle_id: cycleId, workflow: 'ps', role: null, order_index: (last?.order_index ?? 0) + i + 1 }], { session: tx })
       await RubricDraft.create([{ ...standard.template(), round_id: round._id, provenance: { kind: 'template' }, created_by: actor, updated_by: actor }], { session: tx })
       created.push(serialize(round.toObject()))

@@ -4,6 +4,7 @@ import { Applicant, GraderAssignment, Round } from '@/lib/models'
 import { CandidateRound, CandidateRoundScore, PSEvaluationContribution, PSEvaluationRevision } from './models'
 import { WorkflowError, pairLabel, type InterviewerPair } from './domain'
 import { lockRound, psRound } from './rounds'
+import { firstRoundApplicants, enrollFirstRound } from './enrollment'
 import { liveRoundScores } from './scoreService'
 import { CANDIDATE_ENGINE } from './candidateScores'
 const ACTIVE = ['pending', 'in_review', 'ready_for_deliberation']
@@ -15,7 +16,8 @@ export async function roundProgress(roundId: string) {
   const active = new Set(enrollments.filter(e => ACTIVE.includes(e.state)).map(e => String(e.applicant_id)))
   const assignments = await GraderAssignment.find({ round_id: roundId }).select('applicant_id grader_email panel_id submission_count').lean()
   const contributions = await PSEvaluationContribution.find({ round_id: roundId }).select('applicant_id grader_email evaluation_id').lean()
-  const revisions = await PSEvaluationRevision.find({ round_id: roundId }).select('grader_email submitted_at').lean()
+  const revisions = await PSEvaluationRevision.find({ round_id: roundId }).select('grader_email panel_emails submitted_at').lean()
+  const current = revisions.filter(r => contributions.some(c => String(c.evaluation_id) === String(r._id)))
   const pairs = (round.interviewer_pairs ?? []) as InterviewerPair[], paired = round.assignment_mode === 'pair'
   const unitOf = (a: { grader_email: string; panel_id?: string | null }) => paired ? a.panel_id ?? a.grader_email : a.grader_email
   const units = new Map<string, { label: string; members: string[]; assigned: Set<string>; done: Set<string> }>()
@@ -35,10 +37,14 @@ export async function roundProgress(roundId: string) {
     status: round.status, mode: paired ? 'pair' : 'individual', reviews_required: round.reviews_required,
     candidates: active.size, ready: active.size - incomplete.length, evaluations_done: completed, evaluations_needed: needed,
     incomplete: names.map(a => ({ applicant_id: String(a._id), name: `${a.first_name} ${a.last_name}` })),
-    graders: [...units.values()].map(u => {
-      const open = [...u.assigned].filter(id => active.has(id) && !u.done.has(id))
-      return { grader: u.label, assigned: u.assigned.size, done: u.done.size, remaining: open.length, last_active: lastActive(u.members) }
-    }).sort((a, b) => b.remaining - a.remaining || a.grader.localeCompare(b.grader)),
+    grading_access: round.grading_access === 'open' ? 'open' : 'assigned',
+    // Open rounds have no assignments: list every eligible grader with the evaluations they've submitted or co-interviewed.
+    graders: round.grading_access === 'open'
+      ? round.eligible_grader_emails.map((email: string) => ({ grader: email, assigned: null, done: current.filter(r => r.grader_email === email || r.panel_emails?.includes(email)).length, remaining: null, last_active: lastActive([email]) })).sort((a: { done: number; grader: string }, b: { done: number; grader: string }) => a.done - b.done || a.grader.localeCompare(b.grader))
+      : [...units.values()].map(u => {
+        const open = [...u.assigned].filter(id => active.has(id) && !u.done.has(id))
+        return { grader: u.label, assigned: u.assigned.size as number | null, done: u.done.size, remaining: open.length as number | null, last_active: lastActive(u.members) }
+      }).sort((a, b) => (b.remaining ?? 0) - (a.remaining ?? 0) || a.grader.localeCompare(b.grader)),
   }
 }
 
@@ -83,4 +89,21 @@ export async function reopenRound(roundId: string) {
     await Round.updateOne({ _id: roundId }, { $set: { status: 'grading' }, $inc: { configuration_version: 1 } }, { session: tx })
   })
   return { ok: true }
+}
+
+// Open rounds have no assignment step: starting enrolls the first round's applicants and opens grading.
+// Later rounds fill as candidates are advanced into them.
+export async function startOpenRound(roundId: string, actor: string) {
+  let result: Record<string, unknown> = {}
+  await CandidateRound.init()
+  await mongoose.connection.transaction(async tx => {
+    const round = await lockRound(roundId, tx)
+    if (round.grading_access !== 'open') throw new WorkflowError('This round uses assigned grading. Generate assignments instead.', 409)
+    if (round.status !== 'pending') throw new WorkflowError('Grading has already started for this round.', 409)
+    if (!round.rubric_version_id) throw new WorkflowError('Publish a rubric before starting grading.', 409)
+    const enrolled = await firstRoundApplicants(round, tx) ? await enrollFirstRound(roundId, actor, tx) : await CandidateRound.countDocuments({ round_id: roundId }).session(tx)
+    await Round.updateOne({ _id: roundId }, { $set: { status: 'grading' }, $inc: { configuration_version: 1 } }, { session: tx })
+    result = { ok: true, candidates: enrolled }
+  })
+  return result
 }

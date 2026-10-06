@@ -24,14 +24,20 @@ export function validateConfiguration(body: Record<string, unknown>) {
   const emails = [...new Set((body.eligible_grader_emails as string[]).map(e => e.trim().toLowerCase()))].sort()
   const mode = body.assignment_mode ?? 'individual'
   if (!ASSIGNMENT_MODES.includes(mode as AssignmentMode)) throw new WorkflowError('Choose individual graders or interviewer pairs.')
-  const pairs = mode === 'pair' ? validatePairs(body.interviewer_pairs ?? [], emails) : []
+  // Open rounds: graders choose candidates themselves (in-person interviews). Assigned rounds: the tool assigns.
+  const access = body.grading_access ?? 'assigned'
+  if (!GRADING_ACCESS.includes(access as GradingAccess)) throw new WorkflowError('Choose open grading or assigned grading.')
+  // Open pair rounds name the co-interviewer on each form, so no pairs are configured ahead of time.
+  const pairs = mode === 'pair' && access === 'assigned' ? validatePairs(body.interviewer_pairs ?? [], emails) : []
   const n = body.reviews_required
-  // Pair rounds may be created before pairs are chosen; generation waits until enough pairs exist.
-  const units = mode === 'pair' ? Math.max(pairs.length, 1) : emails.length
-  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > units) throw new WorkflowError(mode === 'pair' ? 'Pairs per candidate must be at least 1 and no more than the number of pairs.' : 'Reviews required must be at least 1 and no greater than the eligible grader count.')
-  return { name, evaluation_type: body.evaluation_type as EvaluationType, eligible_grader_emails: emails, reviews_required: n, assignment_mode: mode as AssignmentMode, interviewer_pairs: pairs }
+  // Assigned pair rounds may be created before pairs are chosen; generation waits until enough pairs exist.
+  const units = mode === 'pair' && access === 'assigned' ? Math.max(pairs.length, 1) : emails.length
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > Math.max(units, 1)) throw new WorkflowError(mode === 'pair' && access === 'assigned' ? 'Pairs per candidate must be at least 1 and no more than the number of pairs.' : 'Reviews required must be at least 1 and no greater than the eligible grader count.')
+  return { name, evaluation_type: body.evaluation_type as EvaluationType, eligible_grader_emails: emails, reviews_required: n, assignment_mode: mode as AssignmentMode, grading_access: access as GradingAccess, interviewer_pairs: pairs }
 }
 export const ASSIGNMENT_MODES = ['individual', 'pair'] as const
+export const GRADING_ACCESS = ['open', 'assigned'] as const
+export type GradingAccess = typeof GRADING_ACCESS[number]
 export type AssignmentMode = typeof ASSIGNMENT_MODES[number]
 export type InterviewerPair = { id: string; emails: string[] }
 // Each pair is 2–3 eligible interviewers; a person belongs to at most one pair so workloads stay even.

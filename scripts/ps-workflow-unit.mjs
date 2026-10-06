@@ -80,6 +80,13 @@ try {
   assert.deepEqual([pairConfig.assignment_mode, pairConfig.interviewer_pairs], ['pair', []], 'pairs can be chosen after creation')
   assert.throws(() => d.validateConfiguration({ ...pairConfig, reviews_required: 2, interviewer_pairs: [{ id: 'p1', emails: ['a@x.test', 'b@x.test'] }] }), /Pairs per candidate/)
   assert.equal(d.pairLabel({ id: 'p', emails: ['ana@x.test', 'ben@x.test'] }), 'ana & ben')
+  // Grading access: the API defaults to assigned; open pair rounds take no configured pairs.
+  assert.equal(d.validateConfiguration({ name: 'R', evaluation_type: 'rubric', eligible_grader_emails: eligible, reviews_required: 2 }).grading_access, 'assigned')
+  const openPair = d.validateConfiguration({ name: 'PD', evaluation_type: 'interview', eligible_grader_emails: eligible, reviews_required: 1, assignment_mode: 'pair', grading_access: 'open', interviewer_pairs: [{ id: 'x', emails: ['a@x.test', 'nobody@x.test'] }] })
+  assert.deepEqual([openPair.grading_access, openPair.interviewer_pairs], ['open', []], 'open rounds ignore configured pairs')
+  assert.equal(d.validateConfiguration({ name: 'R', evaluation_type: 'rubric', eligible_grader_emails: eligible, reviews_required: 4, grading_access: 'open' }).reviews_required, 4)
+  assert.throws(() => d.validateConfiguration({ name: 'R', evaluation_type: 'rubric', eligible_grader_emails: eligible, reviews_required: 5, grading_access: 'open' }))
+  assert.throws(() => d.validateConfiguration({ name: 'R', evaluation_type: 'rubric', eligible_grader_emails: eligible, reviews_required: 1, grading_access: 'anyone' }), /open grading or assigned/)
   const frozenInput = { applicantIds: ['done', 'new-1', 'new-2'], eligibleEmails: ['a@example.test', 'b@example.test', 'c@example.test'], reviewsRequired: 2, existing: [{ applicant_id: 'done', grader_email: 'a@example.test' }, { applicant_id: 'done', grader_email: 'b@example.test' }], frozenApplicantIds: ['done'] }
   const frozenPlan = planAssignments(frozenInput)
   assert.ok(frozenPlan.workload.every(w => w.count === 2), 'frozen assignments participate in balancing new work')

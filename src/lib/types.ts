@@ -123,6 +123,7 @@ export interface Round {
   reviews_required?: number
   eligible_grader_emails?: string[]
   assignment_mode?: 'individual' | 'pair'
+  grading_access?: 'open' | 'assigned'
   interviewer_pairs?: { id: string; emails: string[] }[]
   rubric_version_id?: string | null
   scoring_engine?: 'unconfigured'

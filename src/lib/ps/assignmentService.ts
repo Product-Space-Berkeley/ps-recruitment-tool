@@ -16,6 +16,7 @@ const unitOf = (row: AssignmentRow, pairs: InterviewerPair[] | null) => pairs ? 
 async function snapshot(roundId: string, tx?: mongoose.ClientSession) {
   const round = await psRound(roundId, tx)
   if (round.archived || !['pending', 'grading'].includes(round.status)) throw new WorkflowError('Assignments require a pending or active grading round.', 409)
+  if (round.grading_access === 'open') throw new WorkflowError('This round uses open grading, so there is nothing to assign. Use Start grading instead.', 409)
   if (!await RecruitmentCycle.exists({ _id: round.cycle_id, status: 'active' }).session(tx ?? null)) throw new WorkflowError('An active cycle is required.', 409)
   const users = await AuthorizedUser.find({ email: mongoose.trusted({ $in: round.eligible_grader_emails }) }).session(tx ?? null).select('email').lean()
   if (users.length !== round.eligible_grader_emails.length) throw new WorkflowError('A selected grader is no longer authorized. Resolve this before generation.', 409)
@@ -93,6 +94,7 @@ export async function reassignPending(roundId: string, assignmentId: string, tar
   await mongoose.connection.transaction(async tx => {
     const round = await lockRound(roundId, tx)
     if (round.status !== 'grading') throw new WorkflowError('Reassignment requires an active grading round.', 409)
+    if (round.grading_access === 'open') throw new WorkflowError('Open rounds have no assignments to transfer.', 409)
     const assignment = await GraderAssignment.findOne({ _id: assignmentId, round_id: roundId }).session(tx).lean()
     if (!assignment) throw new WorkflowError('Assignment not found.', 404)
     const enrolled = await CandidateRound.findOne({ round_id: roundId, applicant_id: assignment.applicant_id }).session(tx).lean()
