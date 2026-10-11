@@ -44,7 +44,7 @@ function sourceSummary(transfers: TransferRow[]) {
 }
 
 async function requireActiveRubricRound(roundId: string, session?: ClientSession) {
-  const query = Round.findOne({ _id: roundId, status: 'grading', grading_type: 'rubric' })
+  const query = Round.findOne({ _id: roundId, status: 'grading', grading_type: 'rubric', workflow: mongoose.trusted({ $ne: 'ps' }) })
     .select('_id cycle_id')
   if (session) query.session(session)
   const round = await query.lean()
@@ -334,7 +334,7 @@ export async function POST(req: NextRequest) {
       }))
 
       const roundGuard = await Round.updateOne(
-        { _id: roundId, status: 'grading', grading_type: 'rubric' },
+        { _id: roundId, status: 'grading', grading_type: 'rubric', workflow: mongoose.trusted({ $ne: 'ps' }) },
         { $inc: { lifecycle_write_count: 1 } },
         { session: dbSession },
       )

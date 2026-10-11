@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import mongoose from 'mongoose'
 import { connectDB } from '@/lib/mongodb'
-import { GraderAssignment, Review, Applicant, AuthorizedUser } from '@/lib/models'
+import { GraderAssignment, Review, Applicant, AuthorizedUser, Round } from '@/lib/models'
 import { evaluateResults } from '@/lib/scoring'
 import { Review as ReviewType, Applicant as ApplicantType } from '@/lib/types'
 import { requireRole } from '@/lib/serverAuth'
@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
   if (!isObjectId(round_id)) return NextResponse.json({ error: 'A valid round_id is required.' }, { status: 400 })
 
   await connectDB()
+
+  if (await Round.exists({ _id: round_id, workflow: 'ps' })) return NextResponse.json({ error: 'PS scoring not configured. Use PS Round Setup for raw reviews.' }, { status: 409 })
 
   const [assignments, reviews] = await Promise.all([
     GraderAssignment.find({ round_id }).lean(),

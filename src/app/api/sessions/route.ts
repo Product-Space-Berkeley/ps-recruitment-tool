@@ -12,7 +12,23 @@ class SessionCreateRejected extends Error {
   }
 }
 
+function sessionFailure(error: unknown, action: 'load' | 'create') {
+  const name = error instanceof Error ? error.name : 'UnknownError'
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+  const databaseFailure = /Mongo|MongooseServerSelection|MongooseError/.test(name)
+  // Log diagnostic types/codes only; connection errors can contain credentials.
+  console.error(`Unable to ${action} sessions`, { name, code: typeof code === 'number' || typeof code === 'string' ? code : undefined })
+  return NextResponse.json({ error: databaseFailure
+    ? `Unable to ${action} sessions: the database connection is unavailable. Retry; if this persists, check the server's MongoDB connection and logs.`
+    : `Unable to ${action} sessions. Please retry; if this persists, check the server logs.`
+  }, { status: databaseFailure ? 503 : 500, headers: { 'Cache-Control': 'private, no-store' } })
+}
+
 export async function GET(req: NextRequest) {
+  try { return await listSessions(req) } catch (error) { return sessionFailure(error, 'load') }
+}
+
+async function listSessions(req: NextRequest) {
   const auth = await requireRole('grader')
   if (auth instanceof NextResponse) return auth
 
@@ -42,10 +58,14 @@ export async function GET(req: NextRequest) {
   } else {
     sessions = await Session.find(filter).sort({ created_at: -1 }).lean()
   }
-  return NextResponse.json(sessions.map(s => ({ ...s, id: s._id, _id: undefined })))
+  return NextResponse.json(sessions.map(s => ({ ...s, id: s._id, _id: undefined })), { headers: { 'Cache-Control': 'private, no-store' } })
 }
 
 export async function POST(req: NextRequest) {
+  try { return await createSession(req) } catch (error) { return sessionFailure(error, 'create') }
+}
+
+async function createSession(req: NextRequest) {
   const auth = await requireRole('leadership')
   if (auth instanceof NextResponse) return auth
 
@@ -137,7 +157,6 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       )
     }
-    console.error('Failed to create session:', err)
-    return NextResponse.json({ error: 'Unable to create session.' }, { status: 400 })
+    return sessionFailure(err, 'create')
   }
 }
