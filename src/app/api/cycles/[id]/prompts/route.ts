@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/mongodb'
 import { Applicant, EssayPrompt, RecruitmentCycle } from '@/lib/models'
 import { requireRole } from '@/lib/serverAuth'
 import { isNonEmptyString, isObjectId, isPlainRecord, readJsonArray } from '@/lib/apiValidation'
+import { MAX_PROMPTS, MAX_WORD_LIMIT, MIN_PROMPTS } from '@/lib/applicationFields'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -29,6 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     question_number: p.question_number,
     prompt: p.prompt,
     description: p.description,
+    word_limit: p.word_limit ?? null,
     ...(isMember ? { criterion1: p.criterion1, criterion2: p.criterion2 } : {}),
   })))
 }
@@ -43,23 +45,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const parsedBody = await readJsonArray(req)
   if (!parsedBody.ok) return parsedBody.response
-  if (parsedBody.data.length !== 3 || parsedBody.data.some(prompt => !isPlainRecord(prompt))) {
-    return NextResponse.json({ error: 'Exactly three essay prompts are required.' }, { status: 400 })
+  if (
+    parsedBody.data.length < MIN_PROMPTS
+    || parsedBody.data.length > MAX_PROMPTS
+    || parsedBody.data.some(prompt => !isPlainRecord(prompt))
+  ) {
+    return NextResponse.json({ error: `Between ${MIN_PROMPTS} and ${MAX_PROMPTS} essay prompts are required.` }, { status: 400 })
   }
 
   const prompts = parsedBody.data as Record<string, unknown>[]
   const questionNumbers = prompts.map(prompt => prompt.question_number)
   if (
-    questionNumbers.some(number => !Number.isInteger(number) || Number(number) < 1 || Number(number) > 3)
+    questionNumbers.some(number => !Number.isInteger(number) || Number(number) < 1 || Number(number) > prompts.length)
     || new Set(questionNumbers).size !== prompts.length
   ) {
-    return NextResponse.json({ error: 'Question numbers must be unique integers from 1 through 3.' }, { status: 400 })
+    return NextResponse.json({ error: 'Question numbers must be unique and numbered from 1 without gaps.' }, { status: 400 })
   }
 
   const normalized: Array<{
     question_number: number
     prompt: string
     description: string | null
+    word_limit: number
     criterion1: string
     criterion2: string
   }> = []
@@ -76,6 +83,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!isNonEmptyString(p.criterion1, 500) || !isNonEmptyString(p.criterion2, 500)) {
       return NextResponse.json({ error: 'Each prompt requires two grading criteria.' }, { status: 400 })
     }
+    if (!Number.isInteger(p.word_limit) || Number(p.word_limit) < 1 || Number(p.word_limit) > MAX_WORD_LIMIT) {
+      return NextResponse.json({ error: `Each prompt needs a word limit from 1 to ${MAX_WORD_LIMIT}.` }, { status: 400 })
+    }
     if (typeof p.description === 'string' && p.description.length > 2000) {
       return NextResponse.json({ error: 'Prompt descriptions must be 2,000 characters or fewer.' }, { status: 400 })
     }
@@ -83,6 +93,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       question_number: Number(p.question_number),
       prompt: p.prompt.trim(),
       description: typeof p.description === 'string' && p.description.trim() ? p.description.trim() : null,
+      word_limit: Number(p.word_limit),
       criterion1: p.criterion1.trim(),
       criterion2: p.criterion2.trim(),
     })
@@ -117,7 +128,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     })), { session })
     await EssayPrompt.deleteMany(
-      { cycle_id: id, question_number: mongoose.trusted({ $nin: [1, 2, 3] }) },
+      { cycle_id: id, question_number: mongoose.trusted({ $gt: normalized.length }) },
       { session },
     )
   })

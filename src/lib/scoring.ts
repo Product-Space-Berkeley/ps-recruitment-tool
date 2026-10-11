@@ -3,14 +3,11 @@ import { Review, EvaluatedApplicant, Applicant } from './types'
 const QUALITIES = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9'] as const
 type Quality = typeof QUALITIES[number]
 
-const CURRICULUM_WEIGHTS: Record<Quality, number> = {
+// Placeholder: PlexTech's former curriculum-track weights. Replace these once
+// Product Space defines its own grading rubric.
+const WEIGHTS: Record<Quality, number> = {
   r1: 0.2, r2: 0.175, r3: 0.15, r4: 0.2, r5: 0.05,
   r6: 0.05, r7: 0.025, r8: 0.1, r9: 0.0, r0: 0.05,
-}
-
-const DEV_WEIGHTS: Record<Quality, number> = {
-  r1: 0.1, r2: 0.2, r3: 0.1, r4: 0.10588, r5: 0.070588,
-  r6: 0.070588, r7: 0.10588, r8: 0.070588, r9: 0.070588, r0: 0.05,
 }
 
 function mean(arr: number[]): number {
@@ -91,12 +88,9 @@ export function evaluateResults(
       QUALITIES.map(q => [q, scores[q].length > 0 ? mean(scores[q]) : 0])
     ) as Record<Quality, number>
 
-    const weights =
-      applicant.desired_roles === 'Industry Developer' ? DEV_WEIGHTS : CURRICULUM_WEIGHTS
-
     let total = 0
     for (const q of QUALITIES) {
-      const contribution = avgScores[q] * weights[q]
+      const contribution = avgScores[q] * WEIGHTS[q]
       total += isNaN(contribution) ? 0.02 : contribution
     }
 
@@ -106,7 +100,6 @@ export function evaluateResults(
       applicant_id: applicantId,
       first_name: applicant.first_name,
       last_name: applicant.last_name,
-      desired_roles: applicant.desired_roles,
       ...avgScores,
       total,
     })

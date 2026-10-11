@@ -13,8 +13,8 @@ export default function PrivacyPolicy() {
           To authenticate you, the application uses Google sign-in and receives your
           basic Google account identity. The form separately collects your required Berkeley email,
           contact and academic information,
-          optional demographic information, links you choose to provide, your resume, and your
-          written responses.<br /><br />
+          availability, optional demographic information, your resume, a photo used only to match
+          names to faces, and your written responses.<br /><br />
           Product Space uses this information only to administer recruitment, grading, and deliberations.
           Access is limited to authorized Product Space graders and leadership. Records are retained only
           as needed for recruitment administration and are removed from the active database when an

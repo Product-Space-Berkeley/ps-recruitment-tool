@@ -4,13 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, CurrentUser } from '@/lib/auth'
 import { Applicant, EssayPrompt, Round } from '@/lib/types'
-
-// r-keys tied to each essay question (index 0→Q1, 1→Q2, 2→Q3)
-const ESSAY_RATING_KEYS = [
-  { commentKey: 'comment1', rKeys: ['r4', 'r5'] },
-  { commentKey: 'comment2', rKeys: ['r8', 'r9'] },
-  { commentKey: 'comment3', rKeys: ['r6', 'r7'] },
-] as const
+import { ESSAY_REVIEW_SLOTS as ESSAY_RATING_KEYS } from '@/lib/reviewSlots'
 
 type RKey = 'r0' | 'r1' | 'r2' | 'r3' | 'r4' | 'r5' | 'r6' | 'r7' | 'r8' | 'r9'
 type CKey = 'comment0' | 'comment1' | 'comment2' | 'comment3' | 'comment4'
@@ -244,6 +238,12 @@ export default function GradePage() {
     const applicant = queue[queueIndex]
     if (!applicant) return
 
+    // Slots for essay questions this cycle doesn't have are sent as null.
+    const unusedSlots = ESSAY_RATING_KEYS.slice(Math.max(1, applicant.essays.length))
+    const unused = new Set<string>(unusedSlots.flatMap(slot => [slot.commentKey, ...slot.rKeys]))
+    const rating = (key: RKey) => unused.has(key) ? null : Number(ratings[key])
+    const comment = (key: CKey) => unused.has(key) ? null : comments[key] || null
+
     setSubmitting(true)
     const res = await fetch('/api/reviews', {
       method: 'POST',
@@ -252,21 +252,21 @@ export default function GradePage() {
         round_id: selectedRoundId,
         applicant_id: applicant.id,
         grader_email: user.email,
-        r0: Number(ratings.r0),
-        r1: Number(ratings.r1),
-        r2: Number(ratings.r2),
-        r3: Number(ratings.r3),
-        r4: Number(ratings.r4),
-        r5: Number(ratings.r5),
-        r6: Number(ratings.r6),
-        r7: Number(ratings.r7),
-        r8: Number(ratings.r8),
-        r9: Number(ratings.r9),
-        comment0: comments.comment0 || null,
-        comment1: comments.comment1 || null,
-        comment2: comments.comment2 || null,
-        comment3: comments.comment3 || null,
-        comment4: comments.comment4 || null,
+        r0: rating('r0'),
+        r1: rating('r1'),
+        r2: rating('r2'),
+        r3: rating('r3'),
+        r4: rating('r4'),
+        r5: rating('r5'),
+        r6: rating('r6'),
+        r7: rating('r7'),
+        r8: rating('r8'),
+        r9: rating('r9'),
+        comment0: comment('comment0'),
+        comment1: comment('comment1'),
+        comment2: comment('comment2'),
+        comment3: comment('comment3'),
+        comment4: comment('comment4'),
       }),
     })
 
@@ -465,8 +465,10 @@ export default function GradePage() {
           {/* Applicant metadata */}
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 space-y-3">
             <Field label="Year" value={`${applicant.year ?? 'N/A'}${applicant.transfer ? ' (Transfer)' : ''}`} />
-            <Field label="Major" value={applicant.major ?? 'N/A'} />
-            <Field label="Desired Role" value={applicant.desired_roles ?? 'Not specified'} />
+            <Field label="Major(s) & Minor(s)" value={applicant.major ?? 'N/A'} />
+            {typeof applicant.previously_applied === 'boolean' && (
+              <Field label="Applied Before?" value={applicant.previously_applied ? 'Yes' : 'No'} />
+            )}
             <Field
               label="Attended Infosession?"
               value={applicant.infosessions_attended?.length
@@ -511,6 +513,14 @@ export default function GradePage() {
                   </Section>
                 )
               })}
+
+              {applicant.additional_context && (
+                <Section label="Additional Context">
+                  <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
+                    {applicant.additional_context}
+                  </div>
+                </Section>
+              )}
 
               {/* Time commitments */}
               <Section label="Time Commitments">

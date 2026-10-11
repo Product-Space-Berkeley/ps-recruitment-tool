@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   const applicantIds = [...new Set(assignments.map(a => a.applicant_id.toString()))]
   const applicantDocs = await Applicant.find(
     { _id: mongoose.trusted({ $in: applicantIds }) },
-    { resume_base64: 0 }
+    { resume_base64: 0, photo_base64: 0 }
   ).lean()
 
   const applicants: ApplicantType[] = applicantDocs.map(a => ({
@@ -99,12 +99,17 @@ export async function GET(req: NextRequest) {
     year: a.year,
     transfer: a.transfer ?? false,
     major: a.major,
-    gender: a.gender,
     race: a.race,
-    desired_roles: a.desired_roles,
-    linkedin: a.linkedin,
-    website: a.website,
+    ethnicity: a.ethnicity ?? null,
+    previously_applied: a.previously_applied ?? null,
+    meeting_availability: a.meeting_availability ?? null,
+    retreat_availability: a.retreat_availability ?? null,
+    additional_context: a.additional_context ?? null,
     time_commitment: a.time_commitment,
+    gender: a.gender ?? null,
+    desired_roles: a.desired_roles ?? null,
+    linkedin: a.linkedin ?? null,
+    website: a.website ?? null,
     infosessions_attended: Array.isArray(a.infosessions_attended) ? a.infosessions_attended : [],
     resume_url: null,
     created_at: a.created_at,
@@ -150,7 +155,6 @@ export async function GET(req: NextRequest) {
         applicant_id: a.id,
         first_name: a.first_name,
         last_name: a.last_name,
-        desired_roles: a.desired_roles ?? null,
         r0: 0, r1: 0, r2: 0, r3: 0, r4: 0, r5: 0, r6: 0, r7: 0, r8: 0, r9: 0,
         total: 0,
         reviews: [],

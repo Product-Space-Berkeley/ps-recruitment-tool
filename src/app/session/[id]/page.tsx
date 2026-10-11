@@ -36,6 +36,7 @@ type ApplicantInfo = {
   linkedin: string | null
   website: string | null
   has_resume: boolean
+  has_photo?: boolean
   infosessions_attended: string[]
 }
 
@@ -57,7 +58,10 @@ function categorizeGender(value: unknown): GenderCategory {
 }
 
 function GenderBadge({ gender }: { gender: unknown }) {
-  const badge = GENDER_BADGE[categorizeGender(gender)]
+  // The Product Space application doesn't ask for gender; only legacy data has it.
+  const category = categorizeGender(gender)
+  if (category === 'unknown') return null
+  const badge = GENDER_BADGE[category]
   return (
     <span
       title={badge.label}
@@ -86,6 +90,7 @@ function GenderRatio({ candidates }: { candidates: Candidate[] }) {
     totals[categorizeGender(candidate.data?.gender)] += 1
     return totals
   }, { male: 0, female: 0, other: 0, unknown: 0 })
+  if (candidates.every(candidate => categorizeGender(candidate.data?.gender) === 'unknown')) return null
 
   const groups = [
     { label: 'All applicants', rows: candidates, labelClass: 'text-[var(--text-primary)]' },
@@ -1158,6 +1163,14 @@ function CandidateDetail({
       {/* Name + status */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {candidate.applicant_id && applicantInfo?.has_photo && (
+            // eslint-disable-next-line @next/next/no-img-element -- authenticated API image, not a static asset
+            <img
+              src={`/api/applicants/${candidate.applicant_id}/photo`}
+              alt={`Photo of ${candidate.name}`}
+              className="h-14 w-14 shrink-0 rounded-full border border-[var(--border)] object-cover"
+            />
+          )}
           <h2 className="truncate text-2xl font-bold text-[var(--text-primary)]">{candidate.name}</h2>
           <GenderBadge gender={candidate.data?.gender} />
           {onFocus && <button onClick={onFocus} disabled={focusBusy} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--ps-accent)] disabled:opacity-40" title="Show this applicant to everyone in the session">Focus everyone</button>}

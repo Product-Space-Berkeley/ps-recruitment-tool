@@ -8,6 +8,7 @@ import {
 } from '@/lib/models'
 import { requireRole } from '@/lib/serverAuth'
 import { isNonEmptyString, isObjectId, readJsonObject } from '@/lib/apiValidation'
+import { MAX_PROMPTS, MIN_PROMPTS } from '@/lib/applicationFields'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('leadership')
@@ -89,7 +90,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           .select('criterion1 criterion2')
           .session(session)
           .lean()
-        const completePrompts = prompts.length === 3
+        const completePrompts = prompts.length >= MIN_PROMPTS
+          && prompts.length <= MAX_PROMPTS
           && prompts.every(prompt => prompt.criterion1?.trim() && prompt.criterion2?.trim())
         if (
           resultingStatus !== 'active'
@@ -175,7 +177,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (conflict === 'missing') return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (conflict === 'requirements') {
     return NextResponse.json(
-      { error: 'Applications require an active cycle, exactly three complete prompts with rubrics, and a future deadline.' },
+      { error: `Applications require an active cycle, ${MIN_PROMPTS}–${MAX_PROMPTS} essay prompts that each have two grading criteria, and a future deadline.` },
       { status: 409 },
     )
   }
