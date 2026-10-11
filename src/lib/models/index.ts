@@ -50,6 +50,7 @@ const EssayPromptSchema = new Schema({
   question_number: { type: Number, required: true },
   prompt:          { type: String, required: true },
   description:     { type: String, default: null },
+  word_limit:      { type: Number, default: null, min: 1 },  // null on legacy prompts (character limit only)
   criterion1:      { type: String, default: null },
   criterion2:      { type: String, default: null },
 })
@@ -67,17 +68,25 @@ const ApplicantSchema = new Schema({
   identity_provider:    { type: String, enum: ['google', 'google-berkeley', null], default: null },
   identity_verified_at: { type: Date, default: null },
   phone:          { type: String, default: null },
-  year:           { type: String, default: null },  // Freshman | Sophomore | Junior | Senior (legacy rows: grad year e.g. "2027")
-  transfer:       { type: Boolean, default: false },
+  year:           { type: String, default: null },  // see APPLICANT_YEARS (legacy rows: Junior, or grad year e.g. "2027")
+  transfer:       { type: Boolean, default: false }, // null when the applicant skipped the optional question
   major:          { type: String, default: null },
-  gender:         { type: String, default: null },
   race:           { type: [String], default: [] },
-  desired_roles:  { type: String, default: null },
-  linkedin:       { type: String, default: null },
-  website:        { type: String, default: null },
+  ethnicity:      { type: String, default: null },
+  previously_applied:   { type: Boolean, default: null },
+  meeting_availability: { type: String, default: null }, // confirmation text or the applicant's conflict note
+  retreat_availability: { type: String, default: null },
+  additional_context:   { type: String, default: null },
   time_commitment:{ type: String, default: null },
   infosessions_attended: { type: [String], default: [] },
   resume_base64:  { type: String, default: null, select: false, maxlength: 4_300_000 }, // base64-encoded PDF
+  photo_base64:   { type: String, default: null, select: false, maxlength: 2_800_000 },
+  photo_type:     { type: String, enum: ['image/jpeg', 'image/png', null], default: null },
+  // Legacy PlexTech fields, kept so older applications still display.
+  gender:         { type: String, default: null },
+  desired_roles:  { type: String, default: null },
+  linkedin:       { type: String, default: null },
+  website:        { type: String, default: null },
   created_at:     { type: Date, default: Date.now },
 })
 ApplicantSchema.index(
@@ -107,13 +116,25 @@ export const RateLimit = models.RateLimit || model('RateLimit', RateLimitSchema)
 const EssayResponseSchema = new Schema({
   applicant_id: { type: Schema.Types.ObjectId, ref: 'Applicant', required: true },
   prompt_id:    { type: Schema.Types.ObjectId, ref: 'EssayPrompt', required: true },
-  response:     { type: String, required: true, maxlength: 1500 },
+  response:     { type: String, required: true, maxlength: 5000 },
 })
 EssayResponseSchema.index({ applicant_id: 1, prompt_id: 1 }, { unique: true })
 export const EssayResponse = models.EssayResponse || model('EssayResponse', EssayResponseSchema)
 
 // ─── Rounds ──────────────────────────────────────────────────
 const RoundSchema = new Schema({
+  workflow:           { type: String, enum: ['legacy', 'ps'], default: 'legacy' },
+  evaluation_type:    { type: String, enum: ['rubric', 'interview', 'social_feedback', 'submission_rubric'], default: null },
+  reviews_required:   { type: Number, default: 1, min: 1, max: 500 },
+  eligible_grader_emails: { type: [String], default: [] },
+  // PS pair rounds: each candidate is assigned to an interviewer pair that submits one evaluation.
+  assignment_mode:    { type: String, enum: ['individual', 'pair'], default: 'individual' },
+  grading_access:     { type: String, enum: ['open', 'assigned'], default: 'assigned' }, // open: graders pick candidates themselves
+  interviewer_pairs:  { type: [new Schema({ id: { type: String, required: true }, emails: { type: [String], required: true } }, { _id: false })], default: [] },
+  rubric_version_id:  { type: Schema.Types.ObjectId, ref: 'RubricVersion', default: null },
+  scoring_engine:     { type: String, enum: ['unconfigured'], default: 'unconfigured' },
+  configuration_version: { type: Number, default: 0, min: 0 },
+  archived:           { type: Boolean, default: false },
   cycle_id:           { type: Schema.Types.ObjectId, ref: 'RecruitmentCycle', required: true },
   name:               { type: String, required: true },
   order_index:        { type: Number, required: true },
@@ -138,6 +159,7 @@ const GraderAssignmentSchema = new Schema({
   grader_email: { type: String, required: true, lowercase: true, trim: true },
   assigned_at:  { type: Date, default: Date.now },
   submission_count: { type: Number, default: 0, min: 0 },
+  panel_id:     { type: String, default: null }, // PS pair rounds: the interviewer pair this row belongs to
 })
 GraderAssignmentSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1 }, { unique: true })
 GraderAssignmentSchema.index({ grader_email: 1, round_id: 1, applicant_id: 1 })
@@ -153,16 +175,18 @@ const ReviewSchema = new Schema({
   r1: { type: Number, required: true, min: 1, max: 4 },
   r2: { type: Number, required: true, min: 1, max: 4 },
   r3: { type: Number, required: true, min: 1, max: 4 },
+  // Essay ratings/comments (see ESSAY_REVIEW_SLOTS). Question 1 is always
+  // present; questions 2 and 3 are null when the cycle has fewer prompts.
   r4: { type: Number, required: true, min: 1, max: 4 },
   r5: { type: Number, required: true, min: 1, max: 4 },
-  r6: { type: Number, required: true, min: 1, max: 4 },
-  r7: { type: Number, required: true, min: 1, max: 4 },
-  r8: { type: Number, required: true, min: 1, max: 4 },
-  r9: { type: Number, required: true, min: 1, max: 4 },
+  r6: { type: Number, default: null, min: 1, max: 4 },
+  r7: { type: Number, default: null, min: 1, max: 4 },
+  r8: { type: Number, default: null, min: 1, max: 4 },
+  r9: { type: Number, default: null, min: 1, max: 4 },
   comment0: { type: String, required: true, trim: true, maxlength: 2000 },
   comment1: { type: String, required: true, trim: true, maxlength: 2000 },
-  comment2: { type: String, required: true, trim: true, maxlength: 2000 },
-  comment3: { type: String, required: true, trim: true, maxlength: 2000 },
+  comment2: { type: String, default: null, trim: true, maxlength: 2000 },
+  comment3: { type: String, default: null, trim: true, maxlength: 2000 },
   comment4: { type: String, required: true, trim: true, maxlength: 2000 },
   submitted_at: { type: Date, default: Date.now },
 })

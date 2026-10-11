@@ -3,49 +3,51 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, signOut, useSession } from 'next-auth/react'
 import { APPLICATIONS_LAUNCHED } from '@/lib/applicationStatus'
 import { isBerkeleyEmail } from '@/lib/emailValidation'
+import {
+  APPLICANT_YEARS, ETHNICITY_OPTIONS, MAX_AVAILABILITY_NOTE_LENGTH, MAX_PHOTO_BYTES, MAX_RACE_OTHER_LENGTH,
+  MAX_RESUME_BYTES, MEETING_CONFIRMATION, PHOTO_TYPES, RACE_OPTIONS, RACE_OTHER_PREFIX, RETREAT_CONFIRMATION,
+  countWords, essayLimitError,
+} from '@/lib/applicationFields'
 
-const RACE_OPTIONS = [
-  'American Indian or Alaska Native',
-  'Asian (including Indian subcontinent and Philippines origin)',
-  'Black or African American',
-  'White',
-  'Hispanic or Latino',
-  'Middle Eastern',
-  'Native American or Other Pacific Islander',
-  'Prefer not to answer',
-]
-
-interface EssayPrompt { id: string; question_number: number; prompt: string; description: string | null }
+interface EssayPrompt { id: string; question_number: number; prompt: string; description: string | null; word_limit: number | null }
 interface Cycle { id: string; name: string; accepting_applications: boolean; status: string; application_deadline: string | null }
 
+// '' = unanswered; 'confirm' = the standard confirmation; 'other' = explained conflict
+type AvailabilityChoice = '' | 'confirm' | 'other'
+type YesNo = '' | 'Yes' | 'No'
+
 interface ApplicationDraft {
-  version: 1
+  version: 2
   cycleId: string
   savedAt: number
   expiresAt: number
   fields: {
     firstName: string
     lastName: string
-    email: string
     phone: string
-    year: string
-    transfer: boolean
+    undergradConfirmed: boolean
     major: string
-    gender: string
-    genderOther: string
-    race: string[]
-    role: string
-    linkedin: string
-    website: string
-    answers: Record<string, string>
+    year: string
+    previouslyApplied: YesNo
     commitments: string
+    meetingChoice: AvailabilityChoice
+    meetingOther: string
+    retreatChoice: AvailabilityChoice
+    retreatOther: string
+    hoursConfirmed: boolean
+    answers: Record<string, string>
+    additionalContext: string
+    race: string[]
+    raceOther: string
+    ethnicity: string
+    transfer: YesNo
   }
 }
 
-const DRAFT_STORAGE_PREFIX = 'plextech-application-draft:v1'
+const DRAFT_STORAGE_PREFIX = 'ps-application-draft:v2'
 const DEFAULT_DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 function draftStorageKey(cycleId: string, email: string) {
@@ -59,48 +61,41 @@ function isStringRecord(value: unknown): value is Record<string, string> {
     && Object.values(value).every(entry => typeof entry === 'string')
 }
 
+const DRAFT_STRING_FIELDS = [
+  'firstName', 'lastName', 'phone', 'major', 'year', 'previouslyApplied', 'commitments',
+  'meetingChoice', 'meetingOther', 'retreatChoice', 'retreatOther', 'additionalContext', 'raceOther',
+  'ethnicity', 'transfer',
+] as const
+
 function parseApplicationDraft(raw: string): ApplicationDraft | null {
   try {
     const value: unknown = JSON.parse(raw)
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
     const draft = value as Partial<ApplicationDraft>
-    const fields = draft.fields
+    const fields = draft.fields as Record<string, unknown> | undefined
     if (
-      draft.version !== 1
+      draft.version !== 2
       || typeof draft.cycleId !== 'string'
       || typeof draft.savedAt !== 'number'
       || typeof draft.expiresAt !== 'number'
       || typeof fields !== 'object'
       || fields === null
       || Array.isArray(fields)
+      || DRAFT_STRING_FIELDS.some(key => typeof fields[key] !== 'string')
+      || typeof fields.undergradConfirmed !== 'boolean'
+      || typeof fields.hoursConfirmed !== 'boolean'
+      || !Array.isArray(fields.race)
+      || fields.race.some(entry => typeof entry !== 'string')
+      || !isStringRecord(fields.answers)
     ) return null
-
-    const candidate = fields as Partial<ApplicationDraft['fields']>
-    if (
-      typeof candidate.firstName !== 'string'
-      || typeof candidate.lastName !== 'string'
-      || (candidate.email !== undefined && typeof candidate.email !== 'string')
-      || typeof candidate.phone !== 'string'
-      || typeof candidate.year !== 'string'
-      || typeof candidate.transfer !== 'boolean'
-      || typeof candidate.major !== 'string'
-      || typeof candidate.gender !== 'string'
-      || typeof candidate.genderOther !== 'string'
-      || !Array.isArray(candidate.race)
-      || candidate.race.some(entry => typeof entry !== 'string')
-      || typeof candidate.role !== 'string'
-      || typeof candidate.linkedin !== 'string'
-      || typeof candidate.website !== 'string'
-      || !isStringRecord(candidate.answers)
-      || typeof candidate.commitments !== 'string'
-    ) return null
-
-    const parsedDraft = draft as ApplicationDraft
-    if (typeof candidate.email !== 'string') parsedDraft.fields.email = ''
-    return parsedDraft
+    return draft as ApplicationDraft
   } catch {
     return null
   }
+}
+
+function oneOf<T extends string>(value: string, options: readonly T[]): T | '' {
+  return (options as readonly string[]).includes(value) ? value as T : ''
 }
 
 function promptDescriptionWithoutWordCount(description: string) {
@@ -121,6 +116,8 @@ export default function ApplicationForm() {
   const { data: authSession, status: authStatus } = useSession()
   const applicantVerified = (authSession?.user as { applicantVerified?: boolean } | undefined)?.applicantVerified === true
   const authEmail = authSession?.user?.email?.trim().toLowerCase() ?? ''
+  // Applicants must sign in with the Berkeley account they're applying with.
+  const berkeleyAccount = isBerkeleyEmail(authEmail)
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [prompts, setPrompts] = useState<EssayPrompt[]>([])
   const [loadError, setLoadError] = useState('')
@@ -129,23 +126,29 @@ export default function ApplicationForm() {
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [year, setYear] = useState('')
-  const [transfer, setTransfer] = useState(false)
+  const [undergradConfirmed, setUndergradConfirmed] = useState(false)
   const [major, setMajor] = useState('')
-  const [gender, setGender] = useState('')
-  const [genderOther, setGenderOther] = useState('')
-  const [race, setRace] = useState<string[]>([])
-  const [role, setRole] = useState('')
+  const [year, setYear] = useState('')
+  const [previouslyApplied, setPreviouslyApplied] = useState<YesNo>('')
   const [resumeFile, setResumeFile] = useState<File | null>(null)
-  const [linkedin, setLinkedin] = useState('')
-  const [website, setWebsite] = useState('')
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [commitments, setCommitments] = useState('')
-  const [raceDropdownOpen, setRaceDropdownOpen] = useState(false)
-  const raceRef = useRef<HTMLDivElement>(null)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [meetingChoice, setMeetingChoice] = useState<AvailabilityChoice>('')
+  const [meetingOther, setMeetingOther] = useState('')
+  const [retreatChoice, setRetreatChoice] = useState<AvailabilityChoice>('')
+  const [retreatOther, setRetreatOther] = useState('')
+  const [hoursConfirmed, setHoursConfirmed] = useState(false)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [additionalContext, setAdditionalContext] = useState('')
+  const [race, setRace] = useState<string[]>([])
+  const [raceOther, setRaceOther] = useState('')
+  const [ethnicity, setEthnicity] = useState('')
+  const [transfer, setTransfer] = useState<YesNo>('')
+  // File problems are caught when a file is picked; everything else is
+  // checked on submit and then re-checked live as the applicant fixes it.
+  const [fileErrors, setFileErrors] = useState<Record<string, string>>({})
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false)
   const [draftReadyKey, setDraftReadyKey] = useState('')
   const [draftMessage, setDraftMessage] = useState('')
   const submittedRef = useRef(false)
@@ -158,7 +161,7 @@ export default function ApplicationForm() {
       return
     }
 
-    if (authStatus !== 'authenticated' || !applicantVerified) return
+    if (authStatus !== 'authenticated' || !applicantVerified || !berkeleyAccount) return
 
     let cancelled = false
     async function load() {
@@ -181,7 +184,7 @@ export default function ApplicationForm() {
         const promptData: unknown = await pRes.json()
         if (
           !Array.isArray(promptData)
-          || promptData.length !== 3
+          || promptData.length === 0
           || promptData.some(prompt => (
             typeof prompt !== 'object'
             || prompt === null
@@ -203,7 +206,7 @@ export default function ApplicationForm() {
     }
     void load()
     return () => { cancelled = true }
-  }, [router, authStatus, applicantVerified])
+  }, [router, authStatus, applicantVerified, berkeleyAccount])
 
   useEffect(() => {
     if (!cycle || !draftKey || draftReadyKey === draftKey) return
@@ -215,28 +218,29 @@ export default function ApplicationForm() {
         const draft = raw ? parseApplicationDraft(raw) : null
         if (!draft || draft.cycleId !== cycle.id || draft.expiresAt <= Date.now()) {
           if (raw) window.localStorage.removeItem(draftKey)
-          setEmail(current => current || (authEmail.endsWith('@berkeley.edu') ? authEmail : ''))
           setDraftMessage('')
         } else {
+          const f = draft.fields
           const validAnswerKeys = new Set(prompts.map(prompt => `answer_${prompt.id}`))
-          const restoredAnswers = Object.fromEntries(
-            Object.entries(draft.fields.answers).filter(([key]) => validAnswerKeys.has(key)),
-          )
-          setFirstName(draft.fields.firstName)
-          setLastName(draft.fields.lastName)
-          setEmail(draft.fields.email || (authEmail.endsWith('@berkeley.edu') ? authEmail : ''))
-          setPhone(draft.fields.phone)
-          setYear(['Freshman', 'Sophomore', 'Junior', 'Senior'].includes(draft.fields.year) ? draft.fields.year : '')
-          setTransfer(draft.fields.transfer)
-          setMajor(draft.fields.major)
-          setGender(['Male', 'Female', 'Other'].includes(draft.fields.gender) ? draft.fields.gender : '')
-          setGenderOther(draft.fields.genderOther)
-          setRace(draft.fields.race.filter(option => RACE_OPTIONS.includes(option)))
-          setRole(['Curriculum Student', 'Industry Developer'].includes(draft.fields.role) ? draft.fields.role : '')
-          setLinkedin(draft.fields.linkedin)
-          setWebsite(draft.fields.website)
-          setAnswers(restoredAnswers)
-          setCommitments(draft.fields.commitments)
+          setFirstName(f.firstName)
+          setLastName(f.lastName)
+          setPhone(f.phone)
+          setUndergradConfirmed(f.undergradConfirmed)
+          setMajor(f.major)
+          setYear(oneOf(f.year, APPLICANT_YEARS))
+          setPreviouslyApplied(oneOf(f.previouslyApplied, ['Yes', 'No'] as const))
+          setCommitments(f.commitments)
+          setMeetingChoice(oneOf(f.meetingChoice, ['confirm', 'other'] as const))
+          setMeetingOther(f.meetingOther)
+          setRetreatChoice(oneOf(f.retreatChoice, ['confirm', 'other'] as const))
+          setRetreatOther(f.retreatOther)
+          setHoursConfirmed(f.hoursConfirmed)
+          setAnswers(Object.fromEntries(Object.entries(f.answers).filter(([key]) => validAnswerKeys.has(key))))
+          setAdditionalContext(f.additionalContext)
+          setRace(f.race.filter(option => RACE_OPTIONS.includes(option) || option === RACE_OTHER_PREFIX))
+          setRaceOther(f.raceOther)
+          setEthnicity(oneOf(f.ethnicity, ETHNICITY_OPTIONS))
+          setTransfer(oneOf(f.transfer, ['Yes', 'No'] as const))
           setDraftMessage(`Draft saved at ${new Date(draft.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`)
         }
       } catch {
@@ -246,33 +250,21 @@ export default function ApplicationForm() {
     }, 0)
 
     return () => window.clearTimeout(restoreTimeout)
-  }, [authEmail, cycle, draftKey, draftReadyKey, prompts])
+  }, [cycle, draftKey, draftReadyKey, prompts])
 
   useEffect(() => {
     if (!cycle || !draftKey || draftReadyKey !== draftKey || submittedRef.current) return
 
     const deadline = cycle.application_deadline ? new Date(cycle.application_deadline).getTime() : Number.NaN
     const payload: ApplicationDraft = {
-      version: 1,
+      version: 2,
       cycleId: cycle.id,
       savedAt: Date.now(),
       expiresAt: Number.isFinite(deadline) ? deadline : Date.now() + DEFAULT_DRAFT_TTL_MS,
       fields: {
-        firstName,
-        lastName,
-        email,
-        phone,
-        year,
-        transfer,
-        major,
-        gender,
-        genderOther,
-        race,
-        role,
-        linkedin,
-        website,
-        answers,
-        commitments,
+        firstName, lastName, phone, undergradConfirmed, major, year, previouslyApplied,
+        commitments, meetingChoice, meetingOther, retreatChoice, retreatOther, hoursConfirmed,
+        answers, additionalContext, race, raceOther, ethnicity, transfer,
       },
     }
     const pendingDraft = { key: draftKey, value: JSON.stringify(payload) }
@@ -290,24 +282,10 @@ export default function ApplicationForm() {
 
     return () => window.clearTimeout(timeout)
   }, [
-    cycle,
-    draftKey,
-    draftReadyKey,
-    firstName,
-    lastName,
-    email,
-    phone,
-    year,
-    transfer,
-    major,
-    gender,
-    genderOther,
-    race,
-    role,
-    linkedin,
-    website,
-    answers,
-    commitments,
+    cycle, draftKey, draftReadyKey,
+    firstName, lastName, phone, undergradConfirmed, major, year, previouslyApplied,
+    commitments, meetingChoice, meetingOther, retreatChoice, retreatOther, hoursConfirmed,
+    answers, additionalContext, race, raceOther, ethnicity, transfer,
   ])
 
   useEffect(() => {
@@ -323,54 +301,73 @@ export default function ApplicationForm() {
     return () => window.removeEventListener('pagehide', flushDraft)
   }, [])
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (raceRef.current && !raceRef.current.contains(e.target as Node)) {
-        setRaceDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
+  // `RACE_OTHER_PREFIX` in `race` marks the "Other" box as checked; its text lives in `raceOther`.
   function toggleRace(option: string) {
     setRace(prev => prev.includes(option) ? prev.filter(r => r !== option) : [...prev, option])
   }
 
-  function validate(): boolean {
-    const e: Record<string, string> = {}
-    if (!firstName.trim()) e.firstName = 'required'
-    if (!lastName.trim()) e.lastName = 'required'
-    if (!isBerkeleyEmail(email)) e.email = 'Must be a @berkeley.edu email.'
-    if (!phone.trim()) e.phone = 'required'
-    if (!year) e.year = 'required'
-    if (!major.trim()) e.major = 'required'
-    if (!role) e.role = 'required'
-    if (!resumeFile) e.resume = 'required'
-    if (race.length === 0) e.race = 'required'
-    if (!commitments.trim()) e.commitments = 'required'
-    for (const prompt of prompts) {
-      const key = `answer_${prompt.id}`
-      const val = answers[key] ?? ''
-      if (!val.trim()) e[key] = 'required'
-      else if (val.length > 1500) e[key] = 'Your answer must be 1,500 characters or fewer.'
+  function pickFile(file: File | undefined, field: 'resume' | 'photo') {
+    if (!file) return
+    const isResume = field === 'resume'
+    const setFile = isResume ? setResumeFile : setPhotoFile
+    const allowedTypes: readonly string[] = isResume ? ['application/pdf'] : PHOTO_TYPES
+    const maxBytes = isResume ? MAX_RESUME_BYTES : MAX_PHOTO_BYTES
+    let error = ''
+    if (!allowedTypes.includes(file.type)) {
+      error = isResume
+        ? `"${file.name}" isn't a PDF. Save or export your resume as a PDF and upload that file.`
+        : `"${file.name}" isn't a JPG or PNG. If it's an iPhone photo (HEIC), take a screenshot of it or export it as a JPG, then upload that.`
+    } else if (file.size > maxBytes) {
+      error = `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)}MB, but the limit is ${maxBytes / 1024 / 1024}MB. Upload a smaller file.`
     }
-    setErrors(e)
-    return Object.keys(e).length === 0
+    setFile(error ? null : file)
+    setFileErrors(prev => ({ ...prev, [field]: error }))
   }
+
+  // Every problem with the form, in page order. Each message says what to change.
+  function collectIssues(): { key: string; label: string; message: string }[] {
+    const issues: { key: string; label: string; message: string }[] = []
+    const add = (key: string, label: string, message: string) => issues.push({ key, label, message })
+    if (!firstName.trim()) add('firstName', 'First name', 'Enter your first name.')
+    if (!lastName.trim()) add('lastName', 'Last name', 'Enter your last name.')
+    if (phone.trim().length < 7) add('phone', 'Phone number', 'Enter your phone number, including the area code.')
+    if (!undergradConfirmed) add('undergrad', 'UC Berkeley undergraduate', "Check the box to confirm you're a continuing UC Berkeley undergraduate.")
+    if (!major.trim()) add('major', 'Major(s) & minor(s)', 'Enter your major(s), and any minor(s).')
+    if (!year) add('year', 'Year', 'Select your year.')
+    if (!previouslyApplied) add('previouslyApplied', 'Previously applied', "Select whether you've applied to Product Space before.")
+    if (!resumeFile) add('resume', 'Resume', fileErrors.resume || 'Upload your resume as a PDF (3MB max).')
+    if (!photoFile) add('photo', 'Photo', fileErrors.photo || 'Upload a photo of yourself as a JPG or PNG (2MB max).')
+    if (!commitments.trim()) add('commitments', 'Commitments', 'List your commitments this semester, with the estimated hours per week for each.')
+    if (!meetingChoice) add('meeting', 'Thursday meetings', 'Confirm you can attend Thursday meetings (8:00 - 9:30 PM), or choose "Other" and explain your conflict.')
+    else if (meetingChoice === 'other' && !meetingOther.trim()) add('meeting', 'Thursday meetings', 'You chose "Other". Briefly explain your conflict in the box below it.')
+    if (!retreatChoice) add('retreat', 'Retreat', 'Confirm you blocked the retreat dates (9/18 - 9/20), or choose "Other" and explain your conflict.')
+    else if (retreatChoice === 'other' && !retreatOther.trim()) add('retreat', 'Retreat', 'You chose "Other". Briefly explain your conflict in the box below it.')
+    if (!hoursConfirmed) add('hours', '15 hours a week', 'Check the box to confirm you can dedicate at least 15 hours a week.')
+    prompts.forEach((prompt, i) => {
+      const key = `answer_${prompt.id}`
+      const answer = (answers[key] ?? '').trim()
+      const message = answer ? essayLimitError(answer, prompt.word_limit) : 'Answer this question.'
+      if (message) add(key, `Written question ${i + 1}`, message)
+    })
+    if (race.includes(RACE_OTHER_PREFIX) && !raceOther.trim()) {
+      add('race', 'Race', 'You checked "Other". Describe it in the box, or uncheck "Other".')
+    }
+    return issues
+  }
+
+  const issues = attemptedSubmit ? collectIssues() : []
+  const fieldError = (key: string) => issues.find(issue => issue.key === key)?.message ?? fileErrors[key] ?? ''
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitError('')
-    if (!validate()) { setSubmitError('Please fill out the required fields above.'); return }
-    if (!cycle) return
+    setAttemptedSubmit(true)
+    // The list of problems is shown next to the Submit button.
+    if (collectIssues().length > 0 || !cycle) return
 
     setSubmitting(true)
     try {
-      // Convert PDF to base64 (same as the original portal)
-      const resume_base64 = await fileToBase64(resumeFile!)
-
-      const effectiveGender = gender === 'Other' ? genderOther || 'Other' : gender
+      const [resume_base64, photo_base64] = await Promise.all([fileToBase64(resumeFile!), fileToBase64(photoFile!)])
 
       const essays = prompts.map(p => ({
         prompt_id: p.id,
@@ -384,19 +381,24 @@ export default function ApplicationForm() {
           cycle_id: cycle.id,
           first_name: firstName.trim(),
           last_name: lastName.trim(),
-          email: email.trim(),
+          email: authEmail,
           phone: phone.trim(),
-          year,
-          transfer,
+          undergrad_confirmed: undergradConfirmed,
           major: major.trim(),
-          gender: effectiveGender,
-          race,
-          desired_roles: role,
-          linkedin: linkedin.trim() || null,
-          website: website.trim() || null,
-          time_commitment: commitments.trim(),
+          year,
+          previously_applied: previouslyApplied === 'Yes',
           resume_base64,
+          photo_base64,
+          photo_type: photoFile!.type,
+          time_commitment: commitments.trim(),
+          meeting_availability: meetingChoice === 'confirm' ? MEETING_CONFIRMATION : meetingOther.trim(),
+          retreat_availability: retreatChoice === 'confirm' ? RETREAT_CONFIRMATION : retreatOther.trim(),
+          hours_confirmed: hoursConfirmed,
           essays,
+          additional_context: additionalContext.trim() || null,
+          race: race.map(r => r === RACE_OTHER_PREFIX ? `${RACE_OTHER_PREFIX}${raceOther.trim()}` : r),
+          ethnicity: ethnicity || null,
+          transfer: transfer ? transfer === 'Yes' : null,
         }),
       })
 
@@ -424,26 +426,41 @@ export default function ApplicationForm() {
   }
 
   if (authStatus === 'loading') return null
-  if (authStatus !== 'authenticated' || !applicantVerified) {
-    const startSignIn = () => {
+  if (authStatus !== 'authenticated' || !applicantVerified || !berkeleyAccount) {
+    const wrongAccount = authStatus === 'authenticated' && authEmail
+    const startSignIn = async () => {
       if (window.self !== window.top) {
         window.open('/apply/form', '_blank', 'noopener,noreferrer')
         return
       }
-      void signIn('google', { callbackUrl: '/apply/form' })
+      if (wrongAccount) await signOut({ redirect: false })
+      // `hd` asks Google to suggest berkeley.edu accounts; the server still checks.
+      void signIn('google', { callbackUrl: '/apply/form' }, { hd: 'berkeley.edu', prompt: 'select_account' })
     }
     return (
       <div className="apply-page">
         <div className="apply-home-card">
           <Image src="/product-space-logo.png" alt="Product Space" width={50} height={50} />
-          <h2>Verify your email</h2>
-          <p>Sign in with any verified Google account before starting your application.</p>
+          {wrongAccount ? (
+            <>
+              <h2>Use your Berkeley account</h2>
+              <p role="alert">
+                You&apos;re signed in as <strong>{authEmail}</strong>. Product Space applications require your
+                {' '}<strong>@berkeley.edu</strong> Google account. Sign in again and choose your Berkeley account.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2>Verify your email</h2>
+              <p>Sign in with your @berkeley.edu Google account to start your application.</p>
+            </>
+          )}
           <button
             type="button"
             className="apply-btn-primary"
             onClick={startSignIn}
           >
-            Sign in with Google
+            {wrongAccount ? 'Sign in with your Berkeley account' : 'Sign in with Google'}
           </button>
         </div>
       </div>
@@ -495,193 +512,287 @@ export default function ApplicationForm() {
         <div className="apply-field">
           <label>First Name</label>
           <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} />
-          {errors.firstName && <p className="apply-warning">{errors.firstName}</p>}
+          {fieldError('firstName') && <p className="apply-warning">{fieldError('firstName')}</p>}
         </div>
 
         <div className="apply-field">
           <label>Last Name</label>
           <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} />
-          {errors.lastName && <p className="apply-warning">{errors.lastName}</p>}
+          {fieldError('lastName') && <p className="apply-warning">{fieldError('lastName')}</p>}
         </div>
 
         <div className="apply-field">
           <label>Berkeley Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={event => setEmail(event.target.value)}
-            autoComplete="email"
-            placeholder="name@berkeley.edu"
-          />
-          {errors.email && <p className="apply-warning">{errors.email}</p>}
+          <input type="email" value={authEmail} readOnly aria-readonly="true" />
+          <p className="apply-hint" style={{ marginTop: '0.25rem' }}>This is the Google account you signed in with.</p>
         </div>
 
         <div className="apply-field">
           <label>Phone Number</label>
-          <input type="text" value={phone} onChange={e => setPhone(e.target.value)} />
-          {errors.phone && <p className="apply-warning">{errors.phone}</p>}
+          <input type="text" value={phone} onChange={e => setPhone(e.target.value)} autoComplete="tel" />
+          {fieldError('phone') && <p className="apply-warning">{fieldError('phone')}</p>}
         </div>
 
         <div className="apply-field">
-          <label>Year</label>
-          <select value={year} onChange={e => setYear(e.target.value)}>
-            <option value="" disabled>Choose your year:</option>
-            {['Freshman', 'Sophomore', 'Junior', 'Senior'].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-          {errors.year && <p className="apply-warning">{errors.year}</p>}
-          <label className="flex items-center gap-2 mt-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={transfer}
-              onChange={e => setTransfer(e.target.checked)}
-            />
-            I am a transfer student
+          <label>Are you an undergraduate continuing UC Berkeley student?</label>
+          <p className="apply-hint">As a campus student organization, Product Space at Berkeley can only support undergraduate UC Berkeley students at this time.</p>
+          <label className="apply-choice">
+            <input type="checkbox" checked={undergradConfirmed} onChange={e => setUndergradConfirmed(e.target.checked)} />
+            Yes, I confirm that I am an undergraduate continuing student at UC Berkeley.
           </label>
+          {fieldError('undergrad') && <p className="apply-warning">{fieldError('undergrad')}</p>}
         </div>
 
         <div className="apply-field">
-          <label>Major</label>
+          <label>Major(s) &amp; Minor(s)</label>
           <input type="text" value={major} onChange={e => setMajor(e.target.value)} />
-          {errors.major && <p className="apply-warning">{errors.major}</p>}
+          {fieldError('major') && <p className="apply-warning">{fieldError('major')}</p>}
         </div>
+
+        <ChoiceField label="Year" name="year" options={APPLICANT_YEARS} value={year} onChange={setYear} error={fieldError('year')} />
+
+        <ChoiceField
+          label="Have you previously applied to Product Space?"
+          name="previouslyApplied"
+          options={['Yes', 'No']}
+          value={previouslyApplied}
+          onChange={v => setPreviouslyApplied(v as YesNo)}
+          error={fieldError('previouslyApplied')}
+        />
+
+        <FileField
+          label="Resume"
+          hint="Please upload a one-page PDF. Documents of other formats will not be reviewed."
+          accept="application/pdf"
+          file={resumeFile}
+          error={fieldError('resume')}
+          onPick={file => pickFile(file, 'resume')}
+        />
+
+        <FileField
+          label="Photo"
+          hint="Please include a picture of you alone (JPG or PNG). This is just for us to match names to faces and will NOT be used in the evaluation of your application!"
+          accept={PHOTO_TYPES.join(',')}
+          file={photoFile}
+          error={fieldError('photo')}
+          onPick={file => pickFile(file, 'photo')}
+        />
 
         <div className="apply-field">
-          <label>Gender</label>
-          <select value={gender} onChange={e => setGender(e.target.value)}>
-            <option value="" disabled>Please select:</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
-          </select>
-          {gender === 'Other' && (
-            <>
-              <label>(If selected &apos;Other,&apos; please specify below:)</label>
-              <input type="text" value={genderOther} onChange={e => setGenderOther(e.target.value)} />
-            </>
-          )}
+          <label>Please list your existing commitments for this semester, including academics, work, clubs, and research.</label>
+          <p className="apply-hint">
+            For each commitment, include the name and your estimated weekly time commitment. For courses, list each course
+            individually. For clubs or organizations, include your role or position and the estimated weekly time commitment in hours.
+          </p>
+          <p className="apply-hint">Example: CS170 - 10 hrs/week, DATA100 - 10 hrs/week; research - 6 hrs/week</p>
+          <textarea value={commitments} maxLength={3000} onChange={e => setCommitments(e.target.value)} />
+          {fieldError('commitments') && <p className="apply-warning">{fieldError('commitments')}</p>}
         </div>
 
-        <div className="apply-field" ref={raceRef}>
-          <label>Your Demographic Background</label>
-          <p style={{ margin: '0.25rem 0 0.5rem', color: 'var(--text-muted)' }}>Please be ensured that this has absolutely no impact on your application.</p>
-          <div className="apply-multiselect" onClick={() => setRaceDropdownOpen(o => !o)}>
-            {race.length === 0
-              ? <span style={{ color: '#999' }}>Select from below</span>
-              : race.map(r => (
-                <span key={r} className="apply-chip" onClick={e => { e.stopPropagation(); toggleRace(r) }}>
-                  {r} ✕
-                </span>
-              ))
-            }
-          </div>
-          {raceDropdownOpen && (
-            <div className="apply-dropdown">
-              {RACE_OPTIONS.map(opt => (
-                <div
-                  key={opt}
-                  className={`apply-dropdown-item${race.includes(opt) ? ' selected' : ''}`}
-                  onClick={() => toggleRace(opt)}
-                >
-                  {opt}
-                </div>
-              ))}
-            </div>
-          )}
-          {errors.race && <p className="apply-warning">{errors.race}</p>}
-        </div>
+        <AvailabilityField
+          label="Our mandatory general meetings are weekly on Thursdays from 8:00 - 9:30 PM. Please plan to keep this time available if possible."
+          name="meeting"
+          confirmation={MEETING_CONFIRMATION}
+          choice={meetingChoice}
+          other={meetingOther}
+          onChoice={setMeetingChoice}
+          onOther={setMeetingOther}
+          error={fieldError('meeting')}
+        />
+
+        <AvailabilityField
+          label="Our retreat is tentatively scheduled for 9/18 - 9/20. Just in case, please add a calendar reminder for these dates."
+          name="retreat"
+          confirmation={RETREAT_CONFIRMATION}
+          choice={retreatChoice}
+          other={retreatOther}
+          onChoice={setRetreatChoice}
+          onOther={setRetreatOther}
+          error={fieldError('retreat')}
+        />
 
         <div className="apply-field">
-          <label>Intended Role</label>
-          <select value={role} onChange={e => setRole(e.target.value)}>
-            <option value="" disabled>Please select:</option>
-            <option value="Curriculum Student">Curriculum Student</option>
-            <option value="Industry Developer">Industry Developer</option>
-          </select>
-          {errors.role && <p className="apply-warning">{errors.role}</p>}
+          <label>Please confirm that you are able to dedicate at least 15 hours a week to Product Space (meetings, socials, &amp; assignments).</label>
+          <label className="apply-choice">
+            <input type="checkbox" checked={hoursConfirmed} onChange={e => setHoursConfirmed(e.target.checked)} />
+            Yes, I can dedicate 15 hours a week.
+          </label>
+          {fieldError('hours') && <p className="apply-warning">{fieldError('hours')}</p>}
         </div>
 
-        <div className="apply-field">
-          <label>Resume / CV</label>
-          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>Please limit your resume to a one-page PDF document. Documents of other formats will not be reviewed.</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <label className="apply-btn-secondary" style={{ cursor: 'pointer', marginBottom: 0 }}>
-              Choose File
-              <input
-                type="file"
-                accept="application/pdf"
-                style={{ display: 'none' }}
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  if (file.type !== 'application/pdf') {
-                    setResumeFile(null)
-                    setErrors(prev => ({ ...prev, resume: 'Please choose a PDF file.' }))
-                  } else if (file.size > 3 * 1024 * 1024) {
-                    setResumeFile(null)
-                    setErrors(prev => ({ ...prev, resume: 'Max file size is 3MB.' }))
-                  } else {
-                    setResumeFile(file)
-                    setErrors(prev => ({ ...prev, resume: '' }))
-                  }
-                }}
-              />
-            </label>
-            <span style={{ color: resumeFile ? '#333' : 'grey', fontSize: '0.9rem' }}>
-              {resumeFile ? resumeFile.name : 'No file chosen'}
-            </span>
-          </div>
-          {errors.resume && <p className="apply-warning">{errors.resume}</p>}
-        </div>
-
-        <div className="apply-field">
-          <label>LinkedIn Profile (optional)</label>
-          <input type="text" value={linkedin} onChange={e => setLinkedin(e.target.value)} />
-        </div>
-
-        <div className="apply-field">
-          <label>Personal Website (optional)</label>
-          <input type="text" value={website} onChange={e => setWebsite(e.target.value)} />
-        </div>
+        <h3 className="apply-section-title">Written Questions</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Please do not exceed the word limit.</p>
 
         {prompts.map(prompt => {
           const key = `answer_${prompt.id}`
+          const answer = answers[key] ?? ''
           const description = prompt.description ? promptDescriptionWithoutWordCount(prompt.description) : ''
           return (
             <div className="apply-field" key={prompt.id}>
-              <label>{prompt.prompt} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(150–200 words)</span></label>
-              {description && <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>{description}</p>}
+              <label>
+                {prompt.prompt}{' '}
+                {prompt.word_limit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>[{prompt.word_limit} words max]</span>}
+              </label>
+              {description && <p className="apply-hint">{description}</p>}
               <textarea
-                value={answers[key] ?? ''}
-                maxLength={1500}
+                value={answer}
                 onChange={e => setAnswers(prev => ({ ...prev, [key]: e.target.value }))}
               />
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{(answers[key] ?? '').length} / 1,500 characters</p>
-              {errors[key] && <p className="apply-warning">{errors[key]}</p>}
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {prompt.word_limit
+                  ? `${countWords(answer)} / ${prompt.word_limit} words`
+                  : `${answer.length} / 1,500 characters`}
+              </p>
+              {fieldError(key) && <p className="apply-warning">{fieldError(key)}</p>}
             </div>
           )
         })}
 
         <div className="apply-field">
-          <label>Please tell us about your commitments this semester.</label>
-          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>
-            What classes are you taking this semester? Please let us know any other organizations, employment, or commitments you are involved in this semester.
+          <label>[Optional] Do you have any important context or clarifications that you&apos;d like to share with us?</label>
+          <p className="apply-hint">
+            This is not intended as extra room to bolster your application. This is a space for information such as
+            personal/family circumstances, atypical academic paths, context on existing commitments, etc.
           </p>
-          <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0' }}>(Example: CS61A: xx hours)</p>
-          <textarea value={commitments} onChange={e => setCommitments(e.target.value)} />
-          {errors.commitments && <p className="apply-warning">{errors.commitments}</p>}
+          <textarea value={additionalContext} maxLength={3000} onChange={e => setAdditionalContext(e.target.value)} />
         </div>
+
+        <h3 className="apply-section-title">Self Identification</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+          All questions in this section are completely optional and are used purely for reporting purposes to improve our
+          recruitment process. Any answers you provide will not be used against you in any way.
+        </p>
+
+        <div className="apply-field">
+          <label>Race (Select one or more)</label>
+          {RACE_OPTIONS.map(option => (
+            <label key={option} className="apply-choice">
+              <input type="checkbox" checked={race.includes(option)} onChange={() => toggleRace(option)} />
+              {option}
+            </label>
+          ))}
+          <label className="apply-choice">
+            <input type="checkbox" checked={race.includes(RACE_OTHER_PREFIX)} onChange={() => toggleRace(RACE_OTHER_PREFIX)} />
+            Other:
+          </label>
+          {race.includes(RACE_OTHER_PREFIX) && (
+            <input type="text" value={raceOther} maxLength={MAX_RACE_OTHER_LENGTH} onChange={e => setRaceOther(e.target.value)} />
+          )}
+          {fieldError('race') && <p className="apply-warning">{fieldError('race')}</p>}
+        </div>
+
+        <ChoiceField label="Ethnicity" name="ethnicity" options={ETHNICITY_OPTIONS} value={ethnicity} onChange={setEthnicity} optional />
+
+        <ChoiceField
+          label="Are you a transfer student?"
+          name="transfer"
+          options={['Yes', 'No']}
+          value={transfer}
+          onChange={v => setTransfer(v as YesNo)}
+          optional
+        />
 
         <div style={{ marginBottom: '3rem' }}>
           <button type="submit" className="apply-btn-primary" disabled={submitting}>
             {submitting ? 'Submitting...' : 'Submit'}
           </button>
-          {submitError && <p className="apply-warning">{submitError}</p>}
+          {issues.length > 0 && (
+            <div role="alert" className="apply-warning">
+              <p>Please fix {issues.length === 1 ? 'this' : `these ${issues.length}`} before submitting:</p>
+              <ul style={{ margin: '0.25rem 0 0 1.25rem', listStyle: 'disc' }}>
+                {issues.map(issue => <li key={issue.key}><strong>{issue.label}:</strong> {issue.message}</li>)}
+              </ul>
+            </div>
+          )}
+          {submitError && <p role="alert" className="apply-warning">{submitError}</p>}
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Copyright © 2026 Product Space All Rights Reserved.</p>
       </form>
+    </div>
+  )
+}
+
+function ChoiceField({ label, name, options, value, onChange, error, optional }: {
+  label: string
+  name: string
+  options: readonly string[]
+  value: string
+  onChange: (value: string) => void
+  error?: string
+  optional?: boolean
+}) {
+  return (
+    <div className="apply-field" role="radiogroup" aria-label={label}>
+      <label>{label}</label>
+      {options.map(option => (
+        <label key={option} className="apply-choice">
+          <input type="radio" name={name} checked={value === option} onChange={() => onChange(option)} />
+          {option}
+        </label>
+      ))}
+      {optional && value && (
+        <button type="button" onClick={() => onChange('')} style={{ alignSelf: 'flex-start', fontSize: '0.85rem', color: 'var(--text-muted)', textDecoration: 'underline' }}>
+          Clear selection
+        </button>
+      )}
+      {error && <p className="apply-warning">{error}</p>}
+    </div>
+  )
+}
+
+function AvailabilityField({ label, name, confirmation, choice, other, onChoice, onOther, error }: {
+  label: string
+  name: string
+  confirmation: string
+  choice: AvailabilityChoice
+  other: string
+  onChoice: (choice: AvailabilityChoice) => void
+  onOther: (text: string) => void
+  error?: string
+}) {
+  return (
+    <div className="apply-field" role="radiogroup" aria-label={label}>
+      <label>{label}</label>
+      <p className="apply-hint">If you have a time conflict, feel free to select &quot;Other&quot; and briefly explain. This will <strong>NOT</strong> impact or disqualify your application.</p>
+      <label className="apply-choice">
+        <input type="radio" name={name} checked={choice === 'confirm'} onChange={() => onChoice('confirm')} />
+        {confirmation}
+      </label>
+      <label className="apply-choice">
+        <input type="radio" name={name} checked={choice === 'other'} onChange={() => onChoice('other')} />
+        Other:
+      </label>
+      {choice === 'other' && (
+        <input type="text" value={other} maxLength={MAX_AVAILABILITY_NOTE_LENGTH} onChange={e => onOther(e.target.value)} />
+      )}
+      {error && <p className="apply-warning">{error}</p>}
+    </div>
+  )
+}
+
+function FileField({ label, hint, accept, file, error, onPick }: {
+  label: string
+  hint: string
+  accept: string
+  file: File | null
+  error?: string
+  onPick: (file: File | undefined) => void
+}) {
+  return (
+    <div className="apply-field">
+      <label>{label}</label>
+      <p className="apply-hint">{hint}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <label className="apply-btn-secondary" style={{ cursor: 'pointer', marginBottom: 0 }}>
+          Choose File
+          <input type="file" accept={accept} style={{ display: 'none' }} onChange={e => onPick(e.target.files?.[0])} />
+        </label>
+        <span style={{ color: file ? 'var(--text-primary)' : 'grey', fontSize: '0.9rem' }}>
+          {file ? file.name : 'No file chosen'}
+        </span>
+      </div>
+      {error && <p className="apply-warning">{error}</p>}
     </div>
   )
 }

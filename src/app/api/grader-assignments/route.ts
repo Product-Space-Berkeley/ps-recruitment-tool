@@ -92,10 +92,12 @@ export async function POST(req: NextRequest) {
       const rounds = await Round.find({
         _id: mongoose.trusted({ $in: roundIds }),
         status: mongoose.trusted({ $in: ['pending', 'grading'] }),
-      }).select('_id cycle_id').session(dbSession).lean()
+      }).select('_id cycle_id workflow').session(dbSession).lean()
       if (rounds.length !== roundIds.length) {
         throw new AssignmentRejected('Assignments can only be added to pending or active grading rounds.', 409)
       }
+
+      if (rounds.some(round => round.workflow === 'ps')) throw new AssignmentRejected('Use the PS assignment preview/generation endpoint for configured rounds.', 409)
 
       const applicants = await Applicant.find({
         _id: mongoose.trusted({ $in: applicantIds }),

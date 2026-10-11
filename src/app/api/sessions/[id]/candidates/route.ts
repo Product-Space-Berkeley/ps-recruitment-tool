@@ -91,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (session.status !== 'active') {
     return NextResponse.json({ error: 'This session has ended.' }, { status: 409 })
   }
+  if (session.round_id && await Round.exists({ _id: session.round_id, workflow: 'ps' })) return NextResponse.json({ error: 'PS deliberation candidates are imported from the round, not a CSV.' }, { status: 409 })
 
   const parsedBody = await readJsonBody(req, 5_000_000)
   if (!parsedBody.ok) return parsedBody.response

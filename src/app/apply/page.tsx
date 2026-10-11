@@ -55,7 +55,7 @@ export default function ApplyHome() {
       return
     }
     if (authSession) router.push('/apply/form')
-    else void signIn('google', { callbackUrl: '/apply/form' })
+    else void signIn('google', { callbackUrl: '/apply/form' }, { hd: 'berkeley.edu', prompt: 'select_account' })
   }
 
   return (
@@ -81,7 +81,7 @@ export default function ApplyHome() {
           <div style={{ color: 'var(--ps-accent)' }}>
             <h4>Applications are now closed.</h4>
             <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-              Please apply again in Spring 2027!
+              Follow @calproductspace for updates on our next recruitment cycle!
             </p>
           </div>
         )}

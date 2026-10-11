@@ -118,6 +118,19 @@ export interface AuthorizedUser {
 }
 
 export interface Round {
+  workflow?: 'legacy' | 'ps'
+  evaluation_type?: 'rubric' | 'interview' | 'social_feedback' | 'submission_rubric' | null
+  reviews_required?: number
+  eligible_grader_emails?: string[]
+  assignment_mode?: 'individual' | 'pair'
+  grading_access?: 'open' | 'assigned'
+  interviewer_pairs?: { id: string; emails: string[] }[]
+  rubric_version_id?: string | null
+  scoring_engine?: 'unconfigured'
+  configuration_version?: number
+  archived?: boolean
+  configuration_locked?: boolean // Read-only API activity flags; not stored round settings.
+  rubric_locked?: boolean
   id: string
   cycle_id: string
   name: string
@@ -136,15 +149,21 @@ export interface Applicant {
   last_name: string
   email: string | null
   phone: string | null
-  year: string | null // Freshman | Sophomore | Junior | Senior (legacy rows: grad year e.g. "2027")
+  year: string | null // see APPLICANT_YEARS (legacy rows: Junior, or grad year e.g. "2027")
   transfer: boolean | null
   major: string | null
-  gender: string | null
   race: string[] | null
+  ethnicity: string | null
+  previously_applied: boolean | null
+  meeting_availability: string | null
+  retreat_availability: string | null
+  additional_context: string | null
+  time_commitment: string | null
+  // Legacy PlexTech fields (null on new applications)
+  gender: string | null
   desired_roles: string | null
   linkedin: string | null
   website: string | null
-  time_commitment: string | null
   infosessions_attended: string[]
   resume_url: string | null
   created_at: string
@@ -156,6 +175,7 @@ export interface EssayPrompt {
   question_number: number
   prompt: string
   description: string | null
+  word_limit: number | null
   criterion1: string | null
   criterion2: string | null
 }
@@ -203,7 +223,6 @@ export interface EvaluatedApplicant {
   applicant_id: string
   first_name: string
   last_name: string
-  desired_roles: string | null
   r0: number; r1: number; r2: number; r3: number; r4: number
   r5: number; r6: number; r7: number; r8: number; r9: number
   total: number

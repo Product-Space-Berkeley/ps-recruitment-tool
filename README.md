@@ -4,6 +4,51 @@ A recruitment portal for collecting applications, assigning reviewers, grading, 
 
 Built with Next.js, React, TypeScript, NextAuth (Google sign-in), and MongoDB/Mongoose.
 
+## Product Space rounds and decisions
+
+After pulling the integrated workflow, run `npm ci` and restart the development
+server. Mongoose caches schemas, so a running server must be restarted.
+
+1. Use a development database with fake applicants. Open `/admin/rounds`, select
+   a cycle, and create the standard Written Application, PD Interview, and Final
+   rounds. Publish each rubric and choose eligible graders.
+2. Start grading. The standard rounds use open grading: interviewers choose the
+   candidate they met at `/grade/ps` and can credit a co-interviewer. Interviews
+   can be scored directly in the app; Google Forms/Sheets are not required for
+   this workflow. Existing CSV imports remain available for legacy rounds only.
+3. In the round's Reviews panel, close grading to freeze the scores. An explicit
+   override places incomplete candidates on hold with an incomplete snapshot.
+4. Use **Open live deliberation** to create or reopen the round's active room.
+   Its roster comes from ready/held candidates and frozen scores. Share the room
+   code with authorized members to use the existing notes and voting controls.
+5. The room creator or an admin saves decisions. **Accepted** in a non-final room
+   advances the candidate to the next round; in the final room it records final
+   acceptance. Hold and Reject do not advance anyone. The round panel provides
+   the more explicit **Advance** / **Accept** buttons and sorts by frozen score.
+6. Use **Export decisions CSV** for names, emails, current decisions, frozen
+   scores, and decision authors/timestamps. Votes do not automatically decide.
+
+Admins can reopen accepted/rejected decisions into Hold; advanced candidates
+cannot be reset because they already have history in the next round. Reopening
+grading ends the old live room; close grading again and open a new room to use
+updated snapshots. Earlier rooms, evaluations, and decision history are retained.
+
+Before a production deployment, run the index preflight and additive migration
+against the intended database (the name must match `MONGODB_URI`):
+
+```bash
+npm run db:ps:preflight -- --database=ps_recruitment
+npm run db:ps:apply -- --database=ps_recruitment
+```
+
+The integration work does not run these commands against Atlas. Do not use the
+live database for the manual test above. Automated workflow tests use disposable
+local databases: `npm run test:ps:integration` and `npm run test:ps:http`.
+
+Dependency note: production dependencies pass `npm audit --omit=dev`. The full
+audit still reports a development-only `braces`/ESLint dependency chain; npm's
+suggested force fix downgrades Next's ESLint configuration and is not applied.
+
 ## Quick start for a new maintainer
 
 1. Ask a Product Space Berkeley organization owner to add you to the GitHub organization and grant repository access. Get environment values from the current maintainer through the club's password manager or another secure channel.

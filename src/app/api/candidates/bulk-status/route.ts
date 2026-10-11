@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import mongoose from 'mongoose'
 import { connectDB } from '@/lib/mongodb'
-import { Candidate, Session } from '@/lib/models'
+import { Candidate, Session, Round } from '@/lib/models'
+import { decideSessionCandidates } from '@/lib/ps/deliberation'
+import { psApi } from '@/lib/ps/api'
 import { requireRole } from '@/lib/serverAuth'
 import { isObjectId, isSessionId, readJsonObject } from '@/lib/apiValidation'
 
@@ -35,6 +37,11 @@ export async function PATCH(req: NextRequest) {
   }
 
   await connectDB()
+  const room = await Session.findById(session_id).select('round_id').lean()
+  if (room?.round_id && await Round.exists({ _id: room.round_id, workflow: 'ps' })) return psApi('leadership', async () => {
+    await decideSessionCandidates(session_id, uniqueIds as string[], status, auth)
+    return NextResponse.json({ ok: true, updated_count: uniqueIds.length, status })
+  })
 
   let outcome: 'updated' | 'session-missing' | 'forbidden' | 'ended' | 'candidate-mismatch' = 'session-missing'
   await mongoose.connection.transaction(async dbSession => {
