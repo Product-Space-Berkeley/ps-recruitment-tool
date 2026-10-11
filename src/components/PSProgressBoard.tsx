@@ -14,6 +14,7 @@ function ago(iso: string | null) {
 export default function PSProgressBoard({ round, readOnly = false, revision = 0, onChange }: { round: Round; readOnly?: boolean; revision?: number; onChange: () => Promise<void> }) {
   const [data, setData] = useState<Progress | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [confirming, setConfirming] = useState(false), [message, setMessage] = useState('')
   const load = useCallback(async () => { try { setData(await requestJson<Progress>(`/api/ps/rounds/${round.id}/progress`)); setError('') } catch (e) { setError((e as Error).message) } }, [round.id])
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Starts an external API read; state updates run after its response.
   useEffect(() => { void load() }, [load, round.status, revision])
   async function act(path: 'close' | 'reopen' | 'start', body: Record<string, unknown> = {}) {
     setBusy(true); setMessage(''); setError('')

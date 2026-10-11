@@ -34,6 +34,7 @@ export default function PSGradePage() {
       setRoundId(next); if (next) await loadRoster(next); else setRoster(null)
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
   }, [roundId, loadRoster])
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Starts an external API read; state updates run after its response.
   useEffect(() => { void loadRounds() }, []) // eslint-disable-line react-hooks/exhaustive-deps -- load once; later loads are explicit
   const q = query.trim().toLowerCase()
   const candidates = (roster?.candidates ?? []).filter(c => !q || c.name.toLowerCase().includes(q) || c.major.toLowerCase().includes(q))

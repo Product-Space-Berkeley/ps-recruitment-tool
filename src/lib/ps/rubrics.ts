@@ -50,7 +50,7 @@ export function validateRatings(criteria: Criterion[], ratings: unknown) {
 }
 export function validateReviewAccess(input: { actor: string; assignedTo: string | null; state: string; rubricId: string; submittedRubricId: unknown }) {
   if (!input.assignedTo || input.actor !== input.assignedTo) throw new WorkflowError('You must own the assignment to submit a review.', 403)
-  if (!['pending', 'in_review', 'ready_for_deliberation'].includes(input.state)) throw new WorkflowError('This applicant is not accepting reviews in this round.', 409)
+  if (!['pending', 'in_review', 'ready_for_deliberation', 'hold'].includes(input.state)) throw new WorkflowError('This applicant is not accepting reviews in this round.', 409)
   if (input.submittedRubricId !== input.rubricId) throw new WorkflowError('Rubric version changed. Reload the grading form.', 409)
 }
 // No permanent PS import format is assumed. Register a reviewed parser here once supplied.

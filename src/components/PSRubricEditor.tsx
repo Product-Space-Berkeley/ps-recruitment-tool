@@ -43,6 +43,7 @@ export default function PSRubricEditor({ round, rounds, readOnly = false, onChan
   }
   useEffect(() => {
     let live = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Starts an external API read; state updates run after its response.
     lists().then(({ d }) => { if (live && generation.current === 0) { const latest = d.find(d => d.status === 'editing') ?? null; current.current = latest; base.current = latest; setSaved(latest); setWorking(latest) } }).catch(e => { if (live) { setError(e.message); blocked.current = true } }).finally(() => { if (live) setLoading(false) })
     return () => { live = false }
   }, [lists])

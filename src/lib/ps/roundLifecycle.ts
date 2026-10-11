@@ -1,13 +1,13 @@
 import { createHash } from 'crypto'
 import mongoose from 'mongoose'
-import { Applicant, GraderAssignment, Round } from '@/lib/models'
+import { Applicant, GraderAssignment, Round, Session } from '@/lib/models'
 import { CandidateRound, CandidateRoundScore, PSEvaluationContribution, PSEvaluationRevision } from './models'
 import { WorkflowError, pairLabel, type InterviewerPair } from './domain'
 import { lockRound, psRound } from './rounds'
 import { firstRoundApplicants, enrollFirstRound } from './enrollment'
 import { liveRoundScores } from './scoreService'
 import { CANDIDATE_ENGINE } from './candidateScores'
-const ACTIVE = ['pending', 'in_review', 'ready_for_deliberation']
+const ACTIVE = ['pending', 'in_review', 'ready_for_deliberation', 'hold']
 
 // Who still owes work this round: one row per grader (or interviewer pair), plus round totals.
 export async function roundProgress(roundId: string) {
@@ -75,6 +75,7 @@ export async function closeRound(roundId: string, body: Record<string, unknown>,
       }
     })
     if (rows.length) await CandidateRoundScore.insertMany(rows, { session: tx })
+    if (waiting.length) await CandidateRound.updateMany({ _id: mongoose.trusted({ $in: waiting.map(e => e._id) }) }, { $set: { state: 'hold' } }, { session: tx })
     await Round.updateOne({ _id: roundId }, { $set: { status: 'deliberating' }, $inc: { configuration_version: 1 } }, { session: tx })
     result = { ok: true, close_id: String(close_id), frozen: rows.length, incomplete: waiting.length, engine: live.engine ?? CANDIDATE_ENGINE }
   })
@@ -86,6 +87,7 @@ export async function reopenRound(roundId: string) {
   await mongoose.connection.transaction(async tx => {
     const round = await lockRound(roundId, tx)
     if (round.status !== 'deliberating') throw new WorkflowError('Only a closed round can be reopened for grading.', 409)
+    await Session.updateMany({ round_id: roundId, status: 'active' }, { $set: { status: 'ended' } }, { session: tx })
     await Round.updateOne({ _id: roundId }, { $set: { status: 'grading' }, $inc: { configuration_version: 1 } }, { session: tx })
   })
   return { ok: true }

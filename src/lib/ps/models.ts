@@ -22,7 +22,7 @@ const CandidateRoundSchema = new Schema({
   cycle_id: { type: Schema.Types.ObjectId, ref: 'RecruitmentCycle', required: true },
   round_id: { type: Schema.Types.ObjectId, ref: 'Round', required: true },
   applicant_id: { type: Schema.Types.ObjectId, ref: 'Applicant', required: true },
-  state: { type: String, enum: ['pending', 'in_review', 'ready_for_deliberation', 'advanced', 'hold', 'rejected'], default: 'pending' },
+  state: { type: String, enum: ['pending', 'in_review', 'ready_for_deliberation', 'advanced', 'accepted', 'hold', 'rejected'], default: 'pending' },
   source_enrollment: { type: Schema.Types.ObjectId, ref: 'CandidateRound', default: null },
   next_enrollment: { type: Schema.Types.ObjectId, ref: 'CandidateRound', default: null },
   decision_by: { type: String, default: null }, decision_at: { type: Date, default: null },

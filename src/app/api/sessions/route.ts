@@ -84,6 +84,7 @@ async function createSession(req: NextRequest) {
   if (!round_id && role !== null) {
     return NextResponse.json({ error: 'Standalone sessions cannot have a recruitment role track.' }, { status: 400 })
   }
+  if (round_id && await Round.exists({ _id: round_id, workflow: 'ps' })) return NextResponse.json({ error: 'Start PS deliberation from the round’s Reviews panel to import its frozen scores.' }, { status: 409 })
 
   const parentRound = round_id
     ? await Round.findById(round_id).select('cycle_id').lean()

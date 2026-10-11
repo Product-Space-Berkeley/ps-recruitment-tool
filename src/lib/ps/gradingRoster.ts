@@ -4,7 +4,7 @@ import { CandidateRound, PSEvaluationContribution, PSEvaluationRevision, RubricV
 import { WorkflowError } from './domain'
 import { psRound } from './rounds'
 import { serialize } from './records'
-const ACTIVE = ['pending', 'in_review', 'ready_for_deliberation']
+const ACTIVE = ['pending', 'in_review', 'ready_for_deliberation', 'hold']
 // Everything a grader needs for one round: every active candidate, how many evaluations each has, and
 // the grader's own evaluation. Other graders' scores are never included.
 export async function gradingRoster(roundId: string, grader: string) {

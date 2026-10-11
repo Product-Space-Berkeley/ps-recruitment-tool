@@ -62,9 +62,11 @@ export function validatePairs(input: unknown, eligible: string[]): InterviewerPa
 export function pairLabel(pair: InterviewerPair) { return pair.emails.map(e => e.split('@')[0]).join(' & ') }
 
 export function transition(state: string, action: string, hasNext: boolean) {
-  if (!['advance', 'hold', 'reject'].includes(action)) throw new WorkflowError('Choose Advance, Hold or Reject.')
+  if (!['advance', 'accept', 'hold', 'reject'].includes(action)) throw new WorkflowError('Choose Advance, Accept, Hold or Reject.')
+  if (action === 'accept' && hasNext) throw new WorkflowError('Accept is only available in the final round.', 409)
+  if (state === 'accepted') { if (action === 'accept') return 'accepted'; throw new WorkflowError('Reopen this decision before changing it.', 409) }
   if (state === 'advanced') { if (action === 'advance') return 'advanced'; throw new WorkflowError('An advanced enrollment cannot be changed; its history is preserved.', 409) }
   if (state === 'rejected') { if (action === 'reject') return 'rejected'; throw new WorkflowError('A rejected enrollment cannot be advanced.', 409) }
-  if (action === 'advance' && !hasNext) throw new WorkflowError('This is the final configured round. Final decisions belong to the existing decision workflow.', 409)
-  return action === 'advance' ? 'advanced' : action === 'hold' ? 'hold' : 'rejected'
+  if (action === 'advance' && !hasNext) throw new WorkflowError('Use Accept in the final round.', 409)
+  return action === 'accept' ? 'accepted' : action === 'advance' ? 'advanced' : action === 'hold' ? 'hold' : 'rejected'
 }

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import mongoose from 'mongoose'
 import { connectDB } from '@/lib/mongodb'
-import { Candidate, Vote, CandidateNote, Session, SessionMember } from '@/lib/models'
+import { Candidate, Vote, CandidateNote, Session, SessionMember, Round } from '@/lib/models'
+import { decideSessionCandidates } from '@/lib/ps/deliberation'
+import { psApi } from '@/lib/ps/api'
 import { requireRole } from '@/lib/serverAuth'
 import { isNonEmptyString, isObjectId, isPlainRecord, readJsonObject } from '@/lib/apiValidation'
 
@@ -15,6 +17,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsedBody = await readJsonObject(req)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data
+  const linkedCandidate = await Candidate.findById(id).select('session_id').lean()
+  const linkedSession = linkedCandidate ? await Session.findById(linkedCandidate.session_id).select('round_id').lean() : null
+  if (linkedSession?.round_id && await Round.exists({ _id: linkedSession.round_id, workflow: 'ps' })) {
+    if (Object.keys(body).some(key => key !== 'status')) return NextResponse.json({ error: 'PS candidate details come from the application and frozen scores.' }, { status: 409 })
+    return psApi('leadership', async () => {
+      await decideSessionCandidates(linkedCandidate!.session_id, [id], String(body.status), auth)
+      const candidate = await Candidate.findById(id).lean()
+      return NextResponse.json({ ...candidate, id, _id: undefined })
+    })
+  }
 
   const allowed: Record<string, unknown> = {}
   const validStatuses = ['pending', 'accepted', 'rejected', 'hold']
@@ -87,6 +99,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   await connectDB()
   const { id } = await params
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid candidate id.' }, { status: 400 })
+  const linked = await Candidate.findById(id).select('session_id').lean()
+  const room = linked ? await Session.findById(linked.session_id).select('round_id').lean() : null
+  if (room?.round_id && await Round.exists({ _id: room.round_id, workflow: 'ps' })) return NextResponse.json({ error: 'Use a round decision to retain this candidate’s history.' }, { status: 409 })
   let outcome: 'deleted' | 'candidate-missing' | 'session-missing' | 'forbidden' | 'ended' = 'candidate-missing'
   await mongoose.connection.transaction(async dbSession => {
     outcome = 'candidate-missing'

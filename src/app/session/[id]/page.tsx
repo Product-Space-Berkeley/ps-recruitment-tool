@@ -239,7 +239,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     }))
 
     // Merge grader review scores if this session is linked to a round
-    if (sessionData?.round_id && cands.some(c => c.applicant_id && !c.data?.interview)) {
+    if (sessionData?.round_id && cands.some(c => c.applicant_id && !c.data?.interview && !c.data?.ps_workflow)) {
       const statsRes = await read(`/api/admin/grading-stats?round_id=${sessionData.round_id}`)
       if (statsRes.ok) {
         const stats = await statsRes.json()

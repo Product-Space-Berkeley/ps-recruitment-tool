@@ -5,13 +5,17 @@ import { CandidateRound, GenericReview, PSEvaluationContribution } from '@/lib/p
 import { objectId, psApi, serialize } from '@/lib/ps/api'
 import { psRound } from '@/lib/ps/rounds'
 import { decideEnrollment, enrollFirstRound } from '@/lib/ps/enrollment'
-import { nextRound } from '@/lib/ps/domain'
+import { frozenRoundScores } from '@/lib/ps/scoreService'
+import { nextRound, WorkflowError } from '@/lib/ps/domain'
 import { readJsonObject } from '@/lib/apiValidation'
 type Context = { params: Promise<{ id: string }> }
 export async function GET(_req: NextRequest, context: Context) {
   return psApi('leadership', async () => {
     const { id } = await context.params; const round = await psRound(id)
+    const scores = await frozenRoundScores(id)
     const rows = await CandidateRound.find({ round_id: id }).sort({ created_at: 1 }).lean()
+    const scoreOf = (id: unknown) => scores.find(s => s.applicant_id === String(id))?.score ?? null
+    rows.sort((a, b) => (scoreOf(b.applicant_id) ?? -Infinity) - (scoreOf(a.applicant_id) ?? -Infinity))
     const reviews = await GenericReview.find({ round_id: id }).select('applicant_id grader_email').lean()
     const contributions = await PSEvaluationContribution.find({ round_id: id }).select('applicant_id grader_email').lean()
     const completed = [...reviews, ...contributions].filter((r, i, all) => all.findIndex(x => String(x.applicant_id) === String(r.applicant_id) && x.grader_email === r.grader_email) === i)
@@ -19,7 +23,7 @@ export async function GET(_req: NextRequest, context: Context) {
     const names = new Map(applicants.map(a => [String(a._id), `${a.first_name} ${a.last_name}`]))
     const rounds = await Round.find({ cycle_id: round.cycle_id, workflow: 'ps' }).lean()
     const next = nextRound(rounds.map(r => ({ id: String(r._id), order_index: r.order_index, archived: r.archived })), id)
-    return NextResponse.json({ next_round: next ? serialize(rounds.find(r => String(r._id) === next.id)!) : null, reviews_required: round.reviews_required, enrollments: rows.map(r => ({ ...serialize(r), name: names.get(String(r.applicant_id)) ?? 'Applicant', completed_reviews: completed.filter(review => String(review.applicant_id) === String(r.applicant_id)).length })) })
+    return NextResponse.json({ next_round: next ? serialize(rounds.find(r => String(r._id) === next.id)!) : null, reviews_required: round.reviews_required, enrollments: rows.map(r => ({ ...serialize(r), score: scoreOf(r.applicant_id), name: names.get(String(r.applicant_id)) ?? 'Applicant', completed_reviews: completed.filter(review => String(review.applicant_id) === String(r.applicant_id)).length })) })
   })
 }
 export async function POST(req: NextRequest, context: Context) {
@@ -30,6 +34,7 @@ export async function POST(req: NextRequest, context: Context) {
       let count = 0; await mongoose.connection.transaction(async tx => { count = await enrollFirstRound(id, auth.email, tx) })
       return NextResponse.json({ ok: true, count })
     }
+    if (parsed.data.action === 'reopen' && auth.role !== 'admin') throw new WorkflowError('Only admins can reopen decisions.', 403)
     const applicantId = String(parsed.data.applicant_id ?? ''); objectId(applicantId)
     return NextResponse.json(await decideEnrollment(id, applicantId, String(parsed.data.action), auth.email))
   })
