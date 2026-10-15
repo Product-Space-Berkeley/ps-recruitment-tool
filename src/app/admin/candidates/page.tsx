@@ -1,4 +1,5 @@
 'use client'
+import RecruitmentNav from '@/components/RecruitmentNav'
 import Link from 'next/link'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -20,8 +21,7 @@ function RosterPage() {
   const loading = !!cycleId && data?.cycle.id !== cycleId && !error
   const q = query.trim().toLowerCase()
   const rows = (data?.candidates ?? []).filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
-  return <main className="mx-auto w-full min-w-0 max-w-4xl p-5 space-y-5 text-[var(--text-primary)]">
-    <nav className="flex gap-4 text-sm"><Link href="/dashboard">Dashboard</Link><Link href="/admin/rounds">Recruitment rounds</Link></nav>
+  return <><RecruitmentNav /><main className="mx-auto w-full min-w-0 max-w-4xl p-5 space-y-5 text-[var(--text-primary)]">
     <h1 className="text-2xl font-semibold">Candidates</h1>
     <label className="block max-w-md">Recruitment cycle<select className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2" value={cycleId} onChange={e => { setData(null); router.replace(e.target.value ? `/admin/candidates?cycle=${e.target.value}` : '/admin/candidates') }}><option value="">Choose a cycle</option>{cycles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
     {error && <p role="alert">{error}</p>}
@@ -32,6 +32,6 @@ function RosterPage() {
       {!data.candidates.length ? <p>No applicants in this cycle yet.</p> : <div className="overflow-x-auto"><table className="w-full text-sm tabular-nums"><thead><tr className="text-left text-[var(--text-muted)]"><th className="py-2 pr-3">Candidate</th><th className="pr-3">Grade</th><th className="pr-3">Current round</th><th className="pr-3">Status</th><th>Score</th></tr></thead>
         <tbody>{rows.map(c => <tr key={c.id} className="border-t border-[var(--border)]"><td className="py-2 pr-3"><Link className="underline" href={`/admin/candidates/${c.id}`}>{c.name}</Link><span className="block text-xs text-[var(--text-muted)]">{c.email}</span></td><td className="pr-3">{c.year ?? '—'}</td><td className="pr-3">{c.round ?? 'Not enrolled'}</td><td className="pr-3">{c.state ? STATES[c.state] ?? c.state : '—'}</td><td>{c.score?.complete ? `${c.score.score} / ${c.score.max_points} (${c.score.percent}%)` : c.score ? `${c.score.reviews} / ${c.score.required} evaluations` : '—'}</td></tr>)}</tbody></table></div>}
     </>}
-  </main>
+  </main></>
 }
 export default function CandidatesPage() { return <Suspense fallback={<p className="p-5">Loading…</p>}><RosterPage /></Suspense> }

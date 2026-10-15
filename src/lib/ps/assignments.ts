@@ -9,11 +9,12 @@ function hash(text: string) {
   h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16
   return h >>> 0
 }
-export function planAssignments(input: { applicantIds: string[]; eligibleEmails: string[]; reviewsRequired: number; existing?: AssignmentPair[]; completed?: AssignmentPair[]; frozenApplicantIds?: string[]; seed?: string }): AssignmentPlan {
+export function planAssignments(input: { applicantIds: string[]; eligibleEmails: string[]; reviewsRequired: number; existing?: AssignmentPair[]; completed?: AssignmentPair[]; frozenApplicantIds?: string[]; seed?: string; applicantCohorts?: Record<string, string>; excluded?: AssignmentPair[] }): AssignmentPlan {
   const seed = input.seed ?? ''
+  const cohort = (id: string) => input.applicantCohorts?.[id] ?? 'unclassified'
   const rank = (id: string) => hash(`${seed}:${id}`)
   // Seeded order: reproducible, and unrelated to submission order or alphabetical names.
-  const applicants = [...new Set(input.applicantIds)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+  const applicants = [...new Set(input.applicantIds)].sort((a, b) => cohort(a).localeCompare(cohort(b)) || rank(a) - rank(b) || a.localeCompare(b))
   const emails = [...new Set(input.eligibleEmails.map(e => e.trim().toLowerCase()))].sort()
   const n = input.reviewsRequired
   if (!Number.isInteger(n) || n < 1 || n > emails.length) throw new WorkflowError('Reviews required must be between 1 and the eligible grader count.')
@@ -21,6 +22,7 @@ export function planAssignments(input: { applicantIds: string[]; eligibleEmails:
   const frozen = new Set(input.frozenApplicantIds ?? [])
   const key = (p: AssignmentPair) => `${p.applicant_id}::${p.grader_email}`
   const normal = (p: AssignmentPair) => ({ applicant_id: p.applicant_id, grader_email: p.grader_email.trim().toLowerCase() })
+  const excluded = new Set((input.excluded ?? []).map(p => key(normal(p))))
   const completed = new Map<string, AssignmentPair>()
   for (const p of (input.completed ?? []).map(normal)) completed.set(key(p), p)
   const pairs = new Map<string, AssignmentPair>(), existingKeys = new Set((input.existing ?? []).map(p => key(normal(p)))), removals: AssignmentPair[] = []
@@ -28,12 +30,13 @@ export function planAssignments(input: { applicantIds: string[]; eligibleEmails:
     if (!applicantSet.has(p.applicant_id)) throw new WorkflowError('Existing assignments or reviews reference an applicant outside this round. Resolve this before generation.', 409)
     if (completed.has(key(p)) || frozen.has(p.applicant_id)) { pairs.set(key(p), p); continue }
     // Unstarted work for someone no longer eligible is released and reassigned.
-    if (!emailSet.has(p.grader_email)) { removals.push(p); continue }
+    if (!emailSet.has(p.grader_email) || excluded.has(key(p))) { removals.push(p); continue }
     pairs.set(key(p), p)
   }
   const load = new Map(emails.map(e => [e, 0]))
   for (const p of pairs.values()) if (load.has(p.grader_email)) load.set(p.grader_email, load.get(p.grader_email)! + 1)
-  const pick = (candidates: string[], direction: 1 | -1) => candidates.sort((a, b) => direction * (load.get(a)! - load.get(b)!) || rank(a) - rank(b) || a.localeCompare(b))[0]
+  const cohortLoad = (email: string, group: string) => [...pairs.values()].filter(p => p.grader_email === email && cohort(p.applicant_id) === group).length
+  const pick = (candidates: string[], direction: 1 | -1, group: string) => candidates.sort((a, b) => direction * ((load.get(a) ?? 0) - (load.get(b) ?? 0)) || direction * (cohortLoad(a, group) - cohortLoad(b, group)) || rank(a) - rank(b) || a.localeCompare(b))[0]
   for (const applicant of applicants) {
     const mine = () => [...pairs.values()].filter(p => p.applicant_id === applicant)
     // Frozen candidates still count toward workload, but never gain or lose work.
@@ -41,13 +44,14 @@ export function planAssignments(input: { applicantIds: string[]; eligibleEmails:
     // Too many graders after N was lowered: release unstarted work from the busiest graders first.
     let removable = mine().filter(p => !completed.has(key(p)))
     while (mine().length > n && removable.length) {
-      const email = pick(removable.map(p => p.grader_email), -1), p = removable.find(r => r.grader_email === email)!
+      const email = pick(removable.map(p => p.grader_email), -1, cohort(applicant)), p = removable.find(r => r.grader_email === email)!
       pairs.delete(key(p)); removals.push(p); load.set(email, load.get(email)! - 1)
       removable = removable.filter(r => r !== p)
     }
     const assigned = new Set(mine().map(p => p.grader_email))
     while (assigned.size < n) {
-      const email = pick(emails.filter(e => !assigned.has(e)), 1)
+      const email = pick(emails.filter(e => !assigned.has(e) && !excluded.has(key({ applicant_id: applicant, grader_email: e }))), 1, cohort(applicant))
+      if (!email) throw new WorkflowError('Not enough conflict-free reviewers. Add eligible reviewers and retry.', 409)
       const pair = { applicant_id: applicant, grader_email: email }
       pairs.set(key(pair), pair); assigned.add(email); load.set(email, load.get(email)! + 1)
     }

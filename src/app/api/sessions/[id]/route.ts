@@ -232,7 +232,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   let outcome: 'deleted' | 'missing' | 'forbidden' = 'missing'
   await mongoose.connection.transaction(async dbSession => {
-    const existing = await Session.findById(id).select('created_by').session(dbSession).lean()
+    outcome = 'missing'
+    const existing = await Session.findOneAndUpdate({ _id: id }, { $inc: { activity_write_count: 1 } }, { session: dbSession, returnDocument: 'after' }).select('created_by').lean()
     if (!existing) return
     if (existing.created_by?.toLowerCase() !== auth.email.toLowerCase() && auth.role !== 'admin') {
       outcome = 'forbidden'
@@ -243,6 +244,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const candidateIds = candidates.map(candidate => candidate._id)
     if (candidateIds.length) await Vote.deleteMany({ candidate_id: mongoose.trusted({ $in: candidateIds }) }, { session: dbSession })
     if (candidateIds.length) await CandidateNote.deleteMany({ candidate_id: mongoose.trusted({ $in: candidateIds }) }, { session: dbSession })
+    await mongoose.connection.collection('socialcards').deleteMany({ session_id: id }, { session: dbSession })
     await Candidate.deleteMany({ session_id: id }, { session: dbSession })
     await SessionMember.deleteMany({ session_id: id }, { session: dbSession })
     await SessionBan.deleteMany({ session_id: id }, { session: dbSession })

@@ -1,5 +1,7 @@
 'use client'
 
+import SocialCards from '@/components/SocialCards'
+import FinishDecisions from '@/components/FinishDecisions'
 import { useEffect, useState, useCallback, useRef, use } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -7,7 +9,6 @@ import { useSession, signOut } from 'next-auth/react'
 import { Session, Candidate, Vote, VoteType, CandidateNote, GraderReview, CoffeeChatNote } from '@/lib/types'
 import AdminPanel from '@/components/AdminPanel'
 import ThemeToggle from '@/components/ThemeToggle'
-import BehavioralSyncPanel from '@/components/BehavioralSyncPanel'
 import { behavioralNoteLabel } from '@/lib/behavioralDisplay'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -613,6 +614,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {isAdmin && session.round_id && session.status === 'active' && candidates.some(c => c.data?.ps_workflow) && <FinishDecisions sessionId={sessionId} />}
           {isAdmin && (
             <button
               onClick={() => bulkMode ? exitBulkMode() : setBulkMode(true)}
@@ -667,7 +669,6 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       <div className="shrink-0 max-h-[40vh] overflow-y-auto border-b border-[var(--border)] bg-[var(--bg-surface)]">
       <details>
         <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-[var(--text-secondary)]">Session controls · {session.one_vouch_per_member ? '1 vouch per member' : 'Unlimited vouches'}</summary>
-        <BehavioralSyncPanel sessionId={sessionId} admin={authSession?.user?.role === 'admin'} />
       <div className="px-4 py-2 text-sm space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <span>{session.one_vouch_per_member ? 'One vouch per member · remove it to choose someone else' : 'Vouches: no session-wide limit'}</span>
@@ -866,6 +867,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               Select a candidate to view their details
             </div>
           ) : (
+            <>
+            {selected.data?.ps_workflow && <SocialCards key={`social:${selected.id}`} sessionId={sessionId} candidateId={selected.id} email={userEmail ?? ''} />}
             <CandidateDetail
               key={selected.id}
               candidate={selected}
@@ -882,6 +885,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               onVote={handleVote}
               onStatusChange={handleStatusChange}
             />
+            </>
           )}
         </div>
       </>)}

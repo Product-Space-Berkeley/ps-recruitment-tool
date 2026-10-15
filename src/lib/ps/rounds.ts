@@ -24,13 +24,13 @@ export async function lockRound(id: string, tx: mongoose.ClientSession) {
 export async function hasRoundActivity(id: string, tx: mongoose.ClientSession) {
   // New collections are checked without coupling this shared module to their models.
   for (const model of [GraderAssignment, Review, Session]) if (await model.exists({ round_id: id }).session(tx)) return true
-  for (const collection of ['candidaterounds', 'genericreviews', 'candidateroundscores', 'psevaluationcontributions', 'psevaluationrevisions']) if (await mongoose.connection.collection(collection).findOne({ round_id: new mongoose.Types.ObjectId(id) }, { session: tx })) return true
+  for (const collection of ['interviewslots', 'interviewbookings', 'candidaterounds', 'genericreviews', 'candidateroundscores', 'psevaluationcontributions', 'psevaluationrevisions']) if (await mongoose.connection.collection(collection).findOne({ round_id: new mongoose.Types.ObjectId(id) }, { session: tx })) return true
   return false
 }
 // Batch read state for setup controls. Server mutation checks remain authoritative.
 export async function configurationStates(ids: string[]) {
   const filter = { round_id: { $in: ids.map(id => new mongoose.Types.ObjectId(id)) } }
-  const collections = ['graderassignments', 'reviews', 'sessions', 'candidaterounds', 'genericreviews', 'candidateroundscores', 'psevaluationcontributions', 'psevaluationrevisions']
+  const collections = ['graderassignments', 'reviews', 'sessions', 'candidaterounds', 'genericreviews', 'candidateroundscores', 'psevaluationcontributions', 'psevaluationrevisions', 'interviewslots', 'interviewbookings']
   const evidence = await Promise.all(collections.map(collection => mongoose.connection.collection(collection).distinct('round_id', filter)))
   const activity = new Set(evidence.flat().map(String))
   const reviews = new Set([...evidence[1], ...evidence[4], ...evidence[6]].map(String))
@@ -95,10 +95,10 @@ export async function reorderRounds(cycleId: string, ids: unknown, version: unkn
   })
 }
 // Creates PS's fixed sequence (Written App → PD → Final) with each FA26 form as an editable draft.
-// All three rounds use open grading: graders pick candidates. Interview rounds record a co-interviewer per form.
+// New standard rounds require two independent assigned evaluations. Existing rounds retain their configuration.
 export async function createStandardRounds(cycleId: string, body: Record<string, unknown>, actor: string) {
   objectId(cycleId)
-  const first = validateConfiguration({ ...body, name: PS_STANDARD_ROUNDS[0].name, evaluation_type: PS_STANDARD_ROUNDS[0].evaluation_type })
+  const first = validateConfiguration({ ...body, reviews_required: 2, assignment_mode: 'individual', grading_access: 'assigned', interviewer_pairs: [], name: PS_STANDARD_ROUNDS[0].name, evaluation_type: PS_STANDARD_ROUNDS[0].evaluation_type })
   const created: Record<string, unknown>[] = []
   // In development, a model's first use builds its indexes; writing to that collection inside the
   // transaction at the same moment fails with a lock timeout. Finish initialization first.
@@ -107,9 +107,11 @@ export async function createStandardRounds(cycleId: string, body: Record<string,
     await lockCycle(cycleId, tx)
     if (await Round.exists({ cycle_id: cycleId, workflow: 'ps' }).session(tx)) throw new WorkflowError('This cycle already has PS rounds. Add or edit rounds individually instead.', 409)
     await validateGraders(first.eligible_grader_emails, tx)
+    const boardCount = await AuthorizedUser.countDocuments({ email: mongoose.trusted({ $in: first.eligible_grader_emails }), role: mongoose.trusted({ $in: ['admin', 'leadership'] }) }).session(tx)
+    if (boardCount !== first.eligible_grader_emails.length || boardCount < 2) throw new WorkflowError('Choose at least two Leadership or Admin reviewers for standard recruitment rounds.')
     const last = await Round.findOne({ cycle_id: cycleId }).sort({ order_index: -1 }).session(tx).lean()
     for (const [i, standard] of PS_STANDARD_ROUNDS.entries()) {
-      const config = { ...first, name: standard.name, evaluation_type: standard.evaluation_type, reviews_required: i === 0 ? first.reviews_required : 1, assignment_mode: standard.assignment_mode, grading_access: 'open' as const, interviewer_pairs: [] }
+      const config = { ...first, name: standard.name, evaluation_type: standard.evaluation_type, reviews_required: 2, assignment_mode: 'individual' as const, grading_access: 'assigned' as const, interviewer_pairs: [] }
       const [round] = await Round.create([{ ...config, cycle_id: cycleId, workflow: 'ps', role: null, order_index: (last?.order_index ?? 0) + i + 1 }], { session: tx })
       await RubricDraft.create([{ ...standard.template(), round_id: round._id, provenance: { kind: 'template' }, created_by: actor, updated_by: actor }], { session: tx })
       created.push(serialize(round.toObject()))

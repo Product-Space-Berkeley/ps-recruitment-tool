@@ -1,8 +1,13 @@
 'use client'
+import PSMail from '@/components/PSMail'
+import PSScheduling from '@/components/PSScheduling'
+import RecruitmentNav from '@/components/RecruitmentNav'
 import Link from 'next/link'
+import PSConflictInbox from '@/components/PSConflictInbox'
 import PSReassignment from '@/components/PSReassignment'
 import PSReviewHistory from '@/components/PSReviewHistory'
 import PSRubricEditor, { type SavePhase } from '@/components/PSRubricEditor'
+import PSNormalizedScores from '@/components/PSNormalizedScores'
 import PSProgression from '@/components/PSProgression'
 import PSAssignments from '@/components/PSAssignments'
 import PSProgressBoard from '@/components/PSProgressBoard'
@@ -69,9 +74,8 @@ export default function RoundSetupPage() {
   }
   const readOnly = busy || cycle?.status !== 'active'
   const orderLocked = rounds.some(r => r.configuration_locked)
-  return <main className="mx-auto w-full min-w-0 max-w-3xl p-5 text-[var(--text-primary)] space-y-5">
-    <nav className="flex gap-4 text-sm"><Link href="/dashboard">Dashboard</Link><Link href="/admin">Legacy admin console</Link><Link href="/grade/ps">PS grading</Link><Link href={cycleId ? `/admin/candidates?cycle=${cycleId}` : '/admin/candidates'}>Candidates</Link></nav>
-    <h1 className="text-2xl font-semibold">Recruitment rounds</h1>
+  return <><RecruitmentNav /><main className="mx-auto w-full min-w-0 max-w-3xl p-5 text-[var(--text-primary)] space-y-5">
+    <h1 className="text-2xl font-semibold">Rounds &amp; rubrics</h1>
     <p className="text-[var(--text-muted)]">Choose a round to edit its rubric, manage graders or review progress.</p>
     {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
     {loading ? <p>Loading configuration…</p> : allowed && <>
@@ -93,9 +97,12 @@ export default function RoundSetupPage() {
         {!selected && !rounds.length && cycle.status === 'active' && <StandardSetup key={`standard:${cycleId}`} users={users} disabled={readOnly} onCreate={body => action(async () => { const created = await requestJson<Round[]>(`/api/ps/cycles/${cycleId}/rounds`, { ...body, template: 'ps_standard' }); await load(cycleId); if (created[0]) chooseRound(created[0]) })} />}
         {!selected && <RoundEditor key={`new-round:${cycleId}`} round={null} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/cycles/${cycleId}/rounds`, body); chooseRound(saved) })} onArchive={async () => {}} />}
         {selected && <>
-          <nav aria-label="Round workspace" className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3">{[['rubric', 'Rubric'], ['settings', 'Setup & graders'], ['reviews', 'Reviews & progression']].map(([id, label]) => <button key={id} className={buttonClass} aria-pressed={panel === id} disabled={busy} onClick={() => setPanel(id)}>{label}</button>)}</nav>
+          <PSConflictInbox key={selected.id} roundId={selected.id} />
+          <nav aria-label="Round workspace" className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3">{[['rubric', 'Rubric'], ['settings', 'Setup & graders'], ['reviews', 'Reviews & progression'], ['schedule', 'Interview schedule'], ['email', 'Email & exports']].map(([id, label]) => <button key={id} className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ps-accent)] ${panel === id ? 'bg-[var(--bg-active)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-raised)]'}`} aria-pressed={panel === id} disabled={busy} onClick={() => setPanel(id)}>{label}</button>)}</nav>
           <div hidden={panel !== 'settings'} className="space-y-5"><RoundEditor key={`settings:${selected.id}:${selected.configuration_version}`} round={selected} users={users} disabled={readOnly} onSave={body => action(async () => { const saved = await requestJson<Round>(`/api/ps/rounds/${selected.id}`, body, 'PATCH'); setSelected(saved) })} onArchive={() => action(() => requestJson(`/api/ps/rounds/${selected.id}`, { configuration_version: selected.configuration_version, archived: !selected.archived }, 'PATCH'))} />{selected.grading_access === 'open' ? <p className="rounded-xl border border-[var(--border)] p-5 text-sm">Open grading: there&apos;s nothing to assign. Start grading from <span className="font-semibold">Reviews &amp; progression</span>, and graders pick candidates on the grading page.</p> : <><PSReassignment key={`reassignment:${selected.id}`} roundId={selected.id} readOnly={readOnly || selected.archived === true || selected.status !== 'grading'} /><PSAssignments key={`assignments:${selected.id}:${selected.configuration_version}`} round={selected} readOnly={readOnly} onChange={() => load(cycleId)} /></>}</div>
-          <div hidden={panel !== 'reviews'} className="space-y-5"><PSProgressBoard key={`progress:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} onChange={() => load(cycleId)} /><PSProgression key={`progression:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} firstRound={rounds.find(r => !r.archived)?.id === selected.id} onChange={() => load(cycleId)} /><PSReviewHistory key={`history:${selected.id}`} roundId={selected.id} /></div>
+          {panel === 'email' && <PSMail key={selected.id} roundId={selected.id} />}
+          {panel === 'schedule' && <PSScheduling key={selected.id} roundId={selected.id} />}
+          <div hidden={panel !== 'reviews'} className="space-y-5"><PSProgressBoard key={`progress:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} onChange={() => load(cycleId)} /><PSNormalizedScores roundId={selected.id} revision={revision} /><PSProgression key={`progression:${selected.id}`} round={selected} readOnly={readOnly} revision={revision} firstRound={rounds.find(r => !r.archived)?.id === selected.id} onChange={() => load(cycleId)} /><PSReviewHistory key={`history:${selected.id}`} roundId={selected.id} /></div>
         </>}
       </div>}
     </>}
@@ -103,7 +110,7 @@ export default function RoundSetupPage() {
     {/* Retain each visited editor during round/cycle/tab switches, including in-flight saves. */}
     {Object.values(visited).map(r => <div key={r.id} hidden={selected?.id !== r.id || panel !== 'rubric'}><PSRubricEditor round={r} rounds={rounds} readOnly={!admin || r.status === 'ended' || (String(r.cycle_id) === cycleId && cycle?.status !== 'active')} onStatus={reportSave} onChange={async () => { if (String(r.cycle_id) === selectedCycle.current) await load(selectedCycle.current) }} /></div>)}
 
-  </main>
+  </main></>
 }
 function RoundEditor({ round, users, disabled, onSave, onArchive }: { round: Round | null; users: AuthorizedUser[]; disabled: boolean; onSave: (body: unknown) => Promise<void>; onArchive: () => Promise<void> }) {
   const [name, setName] = useState(round?.name ?? '')
@@ -165,16 +172,17 @@ function RoundEditor({ round, users, disabled, onSave, onArchive }: { round: Rou
   </form>
 }
 function StandardSetup({ users, disabled, onCreate }: { users: AuthorizedUser[]; disabled: boolean; onCreate: (body: { eligible_grader_emails: string[]; reviews_required: number }) => Promise<void> }) {
-  const [emails, setEmails] = useState<string[]>([]), [n, setN] = useState(2)
-  const problem = !emails.length ? 'Choose the members who will grade.' : n > emails.length ? `Choose at least ${n} graders, or lower the reviewers per applicant.` : ''
+  const [emails, setEmails] = useState<string[]>([])
+  const board = users.filter(u => u.role === 'admin' || u.role === 'leadership')
+  const n = 2
+  const problem = !emails.length ? 'Choose the members who will grade.' : n > emails.length ? `Choose at least ${n} graders, to provide two independent reviews.` : ''
   return <section className="rounded-xl border border-[var(--ps-accent)] p-5 space-y-4" aria-label="Set up PS standard rounds">
     <h2 className="font-semibold">Set up the PS recruitment rounds</h2>
     <ol className="list-decimal pl-5 text-sm space-y-1"><li>Written App / Resume Screening</li><li>PD Design Interview</li><li>Final Round: Take-home + Social</li></ol>
     <p className="text-sm text-[var(--text-muted)]">Each round starts with last semester’s form as a draft rubric, ready to review and publish. Applicants move through the rounds in this order and can’t skip one. You can change graders for each round afterwards.</p>
-    <fieldset disabled={disabled}><legend className="text-sm">Graders ({emails.length})</legend><div className="max-h-48 overflow-auto space-y-2 p-2">{users.map(u => <label key={u.email} className="flex gap-2 text-sm"><input type="checkbox" checked={emails.includes(u.email)} onChange={e => setEmails(e.target.checked ? [...emails, u.email] : emails.filter(x => x !== u.email))} />{u.email} · {u.role}</label>)}</div>
-      <button type="button" className="text-sm underline" onClick={() => setEmails(users.map(u => u.email))}>Select everyone</button></fieldset>
-    <label className="block text-sm max-w-xs">Reviewers per applicant in the Written App round<input type="number" min={1} className={inputClass} disabled={disabled} value={n || ''} onChange={e => setN(Number(e.target.value))} /></label>
-    <p className="text-sm text-[var(--text-muted)]">All three rounds use open grading: graders pick the candidates they read or interviewed. Interview forms record a co-interviewer.</p>
+    <fieldset disabled={disabled}><legend className="text-sm">Graders ({emails.length})</legend><div className="max-h-48 overflow-auto space-y-2 p-2">{board.map(u => <label key={u.email} className="flex gap-2 text-sm"><input type="checkbox" checked={emails.includes(u.email)} onChange={e => setEmails(e.target.checked ? [...emails, u.email] : emails.filter(x => x !== u.email))} />{u.email} · {u.role}</label>)}</div>
+      <button type="button" className="text-sm underline" onClick={() => setEmails(board.map(u => u.email))}>Select all leadership & admins</button></fieldset>
+    <p className="text-sm text-[var(--text-muted)]">Every applicant receives two independent reviews per round. Confirm the reviewer pool here, then use Assign reviewers in the written round to distribute work evenly across members and class years. Interview scheduling will be added in a later phase; interview assignments are currently managed manually.</p>
     {problem && <p className="text-sm">{problem}</p>}
     <button className={buttonClass} disabled={disabled || !!problem} onClick={() => void onCreate({ eligible_grader_emails: emails, reviews_required: n })}>Create the three rounds</button>
   </section>

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import { Applicant, GraderAssignment, Round } from '@/lib/models'
-import { CandidateRound, GenericReview, RubricVersion, PSEvaluationRevision, PSEvaluationContribution } from './models'
+import { ReviewConflict, CandidateRound, GenericReview, RubricVersion, PSEvaluationRevision, PSEvaluationContribution } from './models'
 import { lockRound } from './rounds'
 import { WorkflowError } from './domain'
 import { Criterion, validateRatings, validateReviewAccess } from './rubrics'
@@ -17,6 +17,7 @@ export async function submitReview(body: Record<string, unknown>, actor: string)
   let result: Record<string, unknown> = {}
   await mongoose.connection.transaction(async tx => {
     const round = await lockRound(roundId, tx)
+    if (await ReviewConflict.exists({ round_id: roundId, applicant_id: applicantId, grader_email: actor }).session(tx)) throw new WorkflowError('You declared a conflict for this applicant and cannot submit a review.', 403)
     if (round.status !== 'grading') throw new WorkflowError('This round is not open for grading.', 409)
     if (!round.rubric_version_id) throw new WorkflowError('Rubric not configured.', 409)
     const open = round.grading_access === 'open'

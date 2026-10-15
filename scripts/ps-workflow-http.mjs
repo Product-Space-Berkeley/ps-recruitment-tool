@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { latePhases } from './ps-late-phases-http.mjs'
 import { cp, mkdtemp, rm, symlink, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -15,6 +16,22 @@ try {
   const apiPath = join(directory, 'src/lib/ps/api.ts')
   const apiSource = await readFile(apiPath, 'utf8')
   await writeFile(apiPath, apiSource.replace("console.error('PS workflow request failed', error instanceof Error ? error.name : 'UnknownError')", "console.error('PS isolated HTTP test error', error)"))
+  const mailPath = join(directory, 'src/lib/ps/mail.ts')
+  const mailSource = await readFile(mailPath, 'utf8')
+  await writeFile(mailPath, mailSource.replaceAll('await fetch(', 'await fakeGoogleFetch(') + `
+async function fakeGoogleFetch(url: string, options?: RequestInit): Promise<Response> {
+  if (url.endsWith('/token')) return Response.json({access_token:'fake-access',refresh_token:'fake-refresh',scope:'https://www.googleapis.com/auth/gmail.send'});
+  if (url.endsWith('/userinfo')) return Response.json({email:'sender@example.test',email_verified:true});
+  if (url.endsWith('/revoke')) return Response.json({});
+  if (url.endsWith('/messages/send')) {
+    const raw = Buffer.from(JSON.parse(String(options?.body)).raw,'base64url').toString();
+    if(raw.includes(Buffer.from('FAIL').toString('base64'))) return Response.json({}, {status:429});
+    if(raw.includes(Buffer.from('UNKNOWN').toString('base64'))) throw new Error('Simulated response lost');
+    return Response.json({id:'fake-message-id'});
+  }
+  throw new Error('Unexpected provider URL');
+}
+`)
   // Fault injection exists only in this disposable copy, never in application code.
   const faultPath = join(directory, 'database-failure.flag')
   const dbPath = join(directory, 'src/lib/mongodb.ts')
@@ -31,7 +48,7 @@ try {
   await mongoose.connection.collection('applicants').insertMany(applicantIds.map((id, i) => ({ _id: id, cycle_id: cycleId, first_name: `Test ${i}`, last_name: 'Applicant', email: `test${i}@example.test` })))
   const socket = createServer(); await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve)); const port = socket.address().port; await new Promise(resolve => socket.close(resolve))
   const base = `http://localhost:${port}`
-  child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'dev', '--webpack', '--port', String(port)], { cwd: directory, env: { ...process.env, NODE_ENV: 'development', MONGODB_URI: uri, TEST_BYPASS_AUTH: '1', DEV_LOGIN: '1', NEXTAUTH_URL: base, NEXTAUTH_SECRET: 'disposable-local-test-only' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'dev', '--webpack', '--port', String(port)], { cwd: directory, env: { ...process.env, NODE_ENV: 'development', MONGODB_URI: uri, TEST_BYPASS_AUTH: '1', DEV_LOGIN: '1', NEXTAUTH_URL: base, NEXTAUTH_SECRET: 'disposable-local-test-only', MAIL_TOKEN_KEY: Buffer.alloc(32,7).toString('base64'), GOOGLE_CLIENT_ID:'fake-google-client', GOOGLE_CLIENT_SECRET:'fake-google-secret' }, stdio: ['ignore', 'pipe', 'pipe'] })
   let output = ''; child.stdout.on('data', chunk => { output = (output + chunk).slice(-6000) }); child.stderr.on('data', chunk => { output = (output + chunk).slice(-6000) })
   for (let i = 0; !output.includes('Ready in'); i++) { if (i > 180 || child.exitCode !== null) throw new Error('Disposable Next server failed to become ready.'); await new Promise(resolve => setTimeout(resolve, 250)) }
   async function call(path, { method = 'GET', body, role = 'admin', email = 'lead@example.test', status = 200 } = {}) {
@@ -63,8 +80,12 @@ try {
   const standardCycle = new mongoose.Types.ObjectId()
   await mongoose.connection.collection('recruitmentcycles').insertOne({ _id: standardCycle, name: 'HTTP standard rounds', status: 'active', configuration_version: 0, lifecycle_write_count: 0 })
   await call(`/api/ps/cycles/${standardCycle}/rounds`, { method: 'POST', role: 'grader', status: 403, body: { template: 'ps_standard', eligible_grader_emails: emails, reviews_required: 2 } })
+  await call(`/api/ps/cycles/${standardCycle}/rounds`, { method: 'POST', status: 400, body: { template: 'ps_standard', eligible_grader_emails: emails, reviews_required: 2 } })
+  await mongoose.connection.collection('authorizedusers').updateMany({ email: { $in: emails } }, { $set: { role: 'leadership' } });
   const standard = await call(`/api/ps/cycles/${standardCycle}/rounds`, { method: 'POST', status: 201, body: { template: 'ps_standard', eligible_grader_emails: emails, reviews_required: 2 } })
   assert.deepEqual(standard.map(r => r.name), ['Written App / Resume Screening', 'PD Design Interview', 'Final Round: Take-home + Social'])
+  assert.ok(standard.every(r => r.reviews_required === 2 && r.assignment_mode === 'individual' && r.grading_access === 'assigned'));
+  await mongoose.connection.collection('authorizedusers').updateMany({ email: { $in: emails } }, { $set: { role: 'grader' } });
   const standardDrafts = await call(`/api/ps/rounds/${standard[1].id}/rubric-drafts`)
   assert.equal(standardDrafts.length, 1); assert.equal(standardDrafts[0].scoring_policy, 'points_v1')
   await call(`/api/ps/cycles/${standardCycle}/rounds`, { method: 'POST', status: 409, body: { template: 'ps_standard', eligible_grader_emails: emails, reviews_required: 2 } })
@@ -117,8 +138,14 @@ try {
   await call(`/api/rounds/${first.id}`, { method: 'DELETE', status: 409 })
   await call(`/api/cycles/${cycleId}`, { method: 'DELETE', status: 409 })
   await call(`/api/ps/rounds/${first.id}/close`, { method: 'POST', body: { override: true } })
-  await call(`/api/ps/rounds/${first.id}/enrollments`, { method: 'POST', body: { action: 'advance', applicant_id: own.applicant_id } })
-  await call(`/api/ps/rounds/${first.id}/enrollments`, { method: 'POST', body: { action: 'advance', applicant_id: own.applicant_id } })
+  await call(`/api/ps/rounds/${first.id}/enrollments`, { method: 'POST', body: { action: 'advance', applicant_id: own.applicant_id }, status:409 })
+  const firstRoom = await call(`/api/ps/rounds/${first.id}/deliberation`, {method:'POST',body:{}})
+  const firstRows = await call(`/api/sessions/${firstRoom.id}/candidates`)
+  await call(`/api/ps/sessions/${firstRoom.id}/finish`, {method:'POST',body:{},status:409})
+  for (const c of firstRows) await call(`/api/candidates/${c.id}`,{method:'PATCH',body:{status:c.applicant_id === own.applicant_id ? 'accepted':'rejected'}})
+  await call(`/api/ps/sessions/${firstRoom.id}/finish`, {method:'POST',body:{},role:'admin',email:'other@example.test',status:403})
+  await call(`/api/ps/sessions/${firstRoom.id}/finish`, {method:'POST',body:{}})
+  await call(`/api/ps/sessions/${firstRoom.id}/finish`, {method:'POST',body:{}})
   assert.equal((await call(`/api/ps/rounds/${last.id}/enrollments`)).enrollments.length, 1)
   await call(`/api/ps/rounds/${last.id}/enrollments`, { method: 'POST', body: { action: 'advance', applicant_id: own.applicant_id }, status: 409 })
   // Final-round HTTP permissions and room-to-enrollment decisions.
@@ -131,20 +158,22 @@ try {
   const decisionPath = `/api/candidates/${roomRows[0].id}`
   await call(decisionPath, { method: 'PATCH', role: 'leadership', email: 'other@example.test', body: { status: 'accepted' }, status: 403 })
   await call(decisionPath, { method: 'PATCH', body: { status: 'accepted' } })
-  assert.equal((await call(`/api/ps/rounds/${last.id}/enrollments`)).enrollments[0].state, 'accepted')
-  await call(decisionPath, { method: 'PATCH', body: { status: 'rejected' }, status: 409 })
-  await call(`/api/ps/rounds/${last.id}/enrollments`, { method: 'POST', role: 'leadership', body: { action: 'reopen', applicant_id: own.applicant_id }, status: 403 })
+  assert.equal((await call(`/api/ps/rounds/${last.id}/enrollments`)).enrollments[0].state, 'hold')
+  await call(decisionPath, { method: 'PATCH', body: { status: 'rejected' } })
+  await call(`/api/ps/rounds/${last.id}/enrollments`, { method: 'POST', role: 'leadership', body: { action: 'reopen', applicant_id: own.applicant_id }, status: 409 })
   await call('/api/candidates/bulk-status', { method: 'PATCH', body: { session_id: room.id, candidate_ids: [roomRows[0].id], status: 'pending' } })
   await call('/api/candidates/bulk-status', { method: 'PATCH', body: { session_id: room.id, candidate_ids: [roomRows[0].id], status: 'rejected' } })
-  assert.equal((await call(`/api/ps/rounds/${last.id}/deliberation`)).candidates[0].state, 'rejected')
+  assert.equal((await call(`/api/ps/rounds/${last.id}/deliberation`)).candidates[0].state, 'hold')
   await call(`/api/sessions/${room.id}/candidates`, { method: 'POST', body: [{ name: 'Unlinked' }], status: 409 })
   await call(decisionPath, { method: 'DELETE', status: 409 })
+  await call(`/api/ps/sessions/${room.id}/finish`, {method:'POST',body:{}})
   const csv = await fetch(base + `/api/ps/rounds/${last.id}/deliberation?format=csv`, { headers: { 'x-test-role': 'admin', 'x-test-email': 'lead@example.test' } })
   assert.equal(csv.status, 200); assert.match(await csv.text(), /rejected/)
-  await call(`/api/ps/rounds/${last.id}/reopen`, { method: 'POST', body: {} })
+  await call(`/api/ps/rounds/${last.id}/reopen`, { method: 'POST', body: {}, status:409 })
   console.log('Final decision HTTP permissions, room synchronization, reopening, bulk decisions, import guards and CSV export passed.')
 
-  await call(`/api/ps/rounds/${first.id}/reopen`, { method: 'POST', body: {} })
+  await call(`/api/ps/rounds/${first.id}/reopen`, { method: 'POST', body: {}, status:409 })
+  await mongoose.connection.collection('rounds').updateOne({_id:new mongoose.Types.ObjectId(first.id)},{$set:{status:'grading'}})
   // Regression: queue filters round-level eligibility even with a historical assignment.
   await mongoose.connection.collection('rounds').updateOne({ _id: new mongoose.Types.ObjectId(first.id) }, { $set: { eligible_grader_emails: emails.slice(1) } })
   const ineligible = await call('/api/ps/grading', { role: 'grader', email: emails[0] })
@@ -163,7 +192,7 @@ try {
   await call(`/api/ps/rounds/${first.id}/assignments`, { status: 409 })
   await call(`/api/ps/rounds/${first.id}/assignments`, { method: 'POST', body: { preview_token: activePreview.preview_token }, status: 409 })
   await call('/api/ps/reviews', { method: 'POST', role: 'grader', email: emails[0], body: reviewBody, status: 409 })
-  const historical = await call(`/api/ps/reviews?round_id=${first.id}`)
+  const historical = await call(`/api/ps/reviews?round_id=${first.id}`, { role: 'grader', email: emails[0] })
   assert.equal(historical[0].ratings[0].raw_score, 3.5)
   assert.equal((await call(`/api/ps/rounds/${last.id}/enrollments`)).enrollments.length, 1)
   const v2cycle = new mongoose.Types.ObjectId()
@@ -313,7 +342,7 @@ try {
     assert.equal(scores.engine, 'points_average_v1')
     const scored = scores.candidates.find(c => c.applicant_id === mine[0].applicant_id), waiting = scores.candidates.find(c => c.applicant_id !== mine[0].applicant_id)
     assert.deepEqual([scored.complete, scored.score, scored.percent], [true, 3, 75]); assert.deepEqual([waiting.complete, waiting.score], [false, null])
-    assert.deepEqual(scores.graders.map(g => [g.grader, g.reviews]), [['one & two', 1]])
+    assert.deepEqual(scores.graders, [], 'Grader statistics stay hidden while the round has incomplete evaluations')
     await call(`/api/ps/rounds/${pr.id}/scores`, { role: 'grader', email: emails[0], status: 403 })
     const reassign = await call(`/api/ps/rounds/${pr.id}/reassign`)
     assert.deepEqual([reassign.mode, reassign.targets, reassign.assignments.length], ['pair', [{ id: 'one', label: 'one & two' }], 1])
@@ -366,11 +395,107 @@ try {
     assert.ok(closedView.closed_rounds.includes('Written')); assert.ok(!closedView.rounds.some(r => r.id === or.id))
     console.log('Open grading HTTP start/roster/closed messaging, interviewer pair HTTP queue partners, shared evaluation, candidate/grader scores and pair reassignment targets, progress, close/reopen, profile and roster passed.')
   }
-  const page = await fetch(base + '/admin/rounds'); assert.equal(page.status, 200); assert.ok((await page.text()).includes('Recruitment rounds'))
+  const page = await fetch(base + '/admin/rounds'); assert.equal(page.status, 200); assert.ok((await page.text()).includes('Rounds &amp; rubrics'))
   const gradePage = await fetch(base + '/grade/ps'); assert.equal(gradePage.status, 200); assert.ok((await gradePage.text()).includes('Dashboard'))
   const dashboard = await fetch(base + '/dashboard'); assert.equal(dashboard.status, 200)
   console.log('PS HTTP authorization, JSON errors, configuration, assignments, grading, progression, scoring and history guards passed.')
   console.log('Sessions HTTP auth, empty/normal lists, database-failure JSON and recovery checks passed.')
+  // Ended-cycle deletion must remove both legacy and immutable PS records,
+  // while retaining every record belonging to other cycles.
+  {
+    const db = mongoose.connection;
+    const cid = new mongoose.Types.ObjectId(), rid = new mongoose.Types.ObjectId(), vid = new mongoose.Types.ObjectId();
+    await db.collection('recruitmentcycles').insertOne({ _id: cid, name: 'Delete fixture', status: 'active' });
+    await db.collection('rounds').insertOne({ _id: rid, cycle_id: cid, workflow: 'ps' });
+    const names = ['candidaterounds', 'rubricdrafts', 'rubricversions', 'genericreviews', 'psevaluationrevisions', 'psevaluationcontributions', 'candidateroundscores'];
+    for (const name of names) await db.collection(name).insertOne({ ...(name === 'rubricversions' ? { _id: vid } : {}), round_id: rid });
+    await db.collection('rubricscoringconfigurations').insertOne({ rubric_version_id: vid });
+    await db.collection('applicants').insertOne({ cycle_id: cid });
+    await db.collection('essayprompts').insertOne({ cycle_id: cid });
+    await call(`/api/cycles/${cid}`, { method: 'DELETE', role: 'grader', status: 403 });
+    await call(`/api/cycles/${cid}`, { method: 'DELETE', role: 'leadership', status: 403 });
+    await call(`/api/cycles/${cid}`, { method: 'DELETE', status: 409 });
+    await db.collection('recruitmentcycles').updateOne({ _id: cid }, { $set: { status: 'ended' } });
+    const remaining = {};
+    for (const name of names) remaining[name] = await db.collection(name).countDocuments({ round_id: { $ne: rid } });
+    await call(`/api/cycles/${cid}`, { method: 'DELETE' });
+    for (const name of names) {
+      assert.equal(await db.collection(name).countDocuments({ round_id: rid }), 0, name);
+      assert.equal(await db.collection(name).countDocuments({}), remaining[name], `Other cycles retained in ${name}`);
+    }
+    assert.equal(await db.collection('rubricscoringconfigurations').countDocuments({ rubric_version_id: vid }), 0);
+    for (const name of ['applicants', 'essayprompts', 'rounds']) assert.equal(await db.collection(name).countDocuments({ cycle_id: cid }), 0);
+    await call(`/api/cycles/${cid}`, { status: 404 });
+    await call(`/api/cycles/${cid}`, { method: 'DELETE', status: 404 });
+    console.log('Ended cycle deletion: authorization, active-cycle guard, PS cascade and unrelated-cycle preservation passed.');
+  }
+  {
+    const db = mongoose.connection, cid = new mongoose.Types.ObjectId();
+    await db.collection('recruitmentcycles').insertOne({ _id: cid, name: 'Wording test', status: 'active', accepting_applications: false, configuration_version: 0 });
+    const wording = { meeting_prompt: 'Mondays at 7 PM', retreat_prompt: 'Retreat in November', availability_hint: 'Tell us about conflicts.', weekly_hours: 12 };
+    const body = { application_wording: wording };
+    await call(`/api/cycles/${cid}`, { method: 'PATCH', body, role: 'grader', status: 403 });
+    await call(`/api/cycles/${cid}`, { method: 'PATCH', body, role: 'leadership', status: 403 });
+    await call(`/api/cycles/${cid}`, { method: 'PATCH', body: { application_wording: { ...wording, weekly_hours: 0 } }, status: 400 });
+    const saved = await call(`/api/cycles/${cid}`, { method: 'PATCH', body });
+    assert.deepEqual(saved.application_wording, wording);
+    await db.collection('recruitmentcycles').updateOne({ _id: cid }, { $set: { accepting_applications: true, application_deadline: new Date(Date.now() + 86400000) } });
+    const publicCycles = await call('/api/cycles', { role: null });
+    assert.deepEqual(publicCycles.find(c => c.id === String(cid)).application_wording, wording);
+    await call(`/api/cycles/${cid}`, { method: 'PATCH', body, status: 409 });
+    await db.collection('recruitmentcycles').updateOne({ _id: cid }, { $set: { accepting_applications: false } });
+    await db.collection('applicants').insertOne({ cycle_id: cid });
+    await call(`/api/cycles/${cid}`, { method: 'PATCH', body, status: 409 });
+    const sid = 'DEL123', candidate = new mongoose.Types.ObjectId();
+    await db.collection('sessions').insertOne({ _id: sid, name: 'Delete test', created_by: 'owner@example.test', status: 'ended' });
+    await db.collection('candidates').insertOne({ _id: candidate, session_id: sid });
+    for (const name of ['votes', 'candidatenotes']) await db.collection(name).insertOne({ candidate_id: candidate });
+    for (const name of ['sessionmembers', 'sessionbans']) await db.collection(name).insertOne({ session_id: sid });
+    await call(`/api/sessions/${sid}`, { method: 'DELETE', role: 'grader', status: 403 });
+    await call(`/api/sessions/${sid}`, { method: 'DELETE', role: 'leadership', email: 'other@example.test', status: 403 });
+    await call(`/api/sessions/${sid}`, { method: 'DELETE', role: 'leadership', email: 'owner@example.test' });
+    assert.equal(await db.collection('sessions').countDocuments({ _id: sid }), 0);
+    for (const name of ['candidates', 'sessionmembers', 'sessionbans']) assert.equal(await db.collection(name).countDocuments({ session_id: sid }), 0);
+    for (const name of ['votes', 'candidatenotes']) assert.equal(await db.collection(name).countDocuments({ candidate_id: candidate }), 0);
+    assert.ok(await db.collection('applicants').findOne({ cycle_id: cid }));
+    console.log('Application wording validation, publication/locking and session deletion permissions/cascade passed.');
+  }
+  {
+    const db = mongoose.connection, cycle = new mongoose.Types.ObjectId(), round = new mongoose.Types.ObjectId(), applicant = new mongoose.Types.ObjectId(), version = new mongoose.Types.ObjectId();
+    const pool = ['phase2a@example.test', 'phase2b@example.test', 'phase2c@example.test'];
+    await db.collection('authorizedusers').insertMany(pool.map(email => ({ email, role: 'leadership' })));
+    await db.collection('recruitmentcycles').insertOne({ _id: cycle, name: 'Phase 2', status: 'active' });
+    await db.collection('rounds').insertOne({ _id: round, cycle_id: cycle, workflow: 'ps', archived: false, status: 'grading', name: 'Blind review', reviews_required: 2, assignment_mode: 'individual', grading_access: 'assigned', eligible_grader_emails: pool, rubric_version_id: version });
+    await db.collection('applicants').insertOne({ _id: applicant, cycle_id: cycle, first_name: 'Privacy', last_name: 'Fixture', year: 'Freshman' });
+    await db.collection('candidaterounds').insertOne({ cycle_id: cycle, round_id: round, applicant_id: applicant, state: 'in_review' });
+    await db.collection('graderassignments').insertMany(pool.slice(0, 2).map(grader_email => ({ round_id: round, applicant_id: applicant, grader_email, submission_count: 0 })));
+    const revision = new mongoose.Types.ObjectId();
+    await db.collection('psevaluationrevisions').insertOne({ _id: revision, round_id: round, applicant_id: applicant, grader_email: pool[0], rubric_version_id: version, score: 8, max_points: 10, percent: 80, comments: 'PRIVATE', revision: 1 });
+    await db.collection('psevaluationcontributions').insertOne({ round_id: round, applicant_id: applicant, grader_email: pool[0], evaluation_id: revision, revision: 1 });
+    assert.equal((await call(`/api/ps/reviews?round_id=${round}`, { role: 'leadership', email: pool[1] })).length, 0);
+    assert.equal((await call(`/api/ps/reviews?round_id=${round}`)).length, 0, 'Admin cannot inspect incomplete peer reviews');
+    assert.equal((await call(`/api/ps/reviews?round_id=${round}`, { role: 'leadership', email: pool[0] })).length, 1);
+    const profile = await call(`/api/ps/candidates/${applicant}`);
+    assert.equal(profile.timeline[0].evaluations.length, 0);
+    const score = await call(`/api/ps/rounds/${round}/scores`);
+    assert.equal(score.graders.length, 0);
+    const path = `/api/ps/rounds/${round}/conflicts`;
+    await call(path, { method: 'POST', role: 'grader', email: 'outsider@example.test', body: { applicant_id: String(applicant) }, status: 403 });
+    const moved = await call(path, { method: 'POST', role: 'leadership', email: pool[1], body: { applicant_id: String(applicant) } });
+    assert.equal(moved.resolved, true);
+    assert.ok(await db.collection('graderassignments').findOne({ round_id: round, grader_email: pool[2] }));
+    assert.equal(await db.collection('graderassignments').countDocuments({ round_id: round, grader_email: pool[1] }), 0);
+    await call('/api/ps/reviews', { method: 'POST', role: 'leadership', email: pool[1], body: { round_id: String(round), applicant_id: String(applicant), comments: '' }, status: 403 });
+    assert.equal((await call(path, { method: 'POST', role: 'leadership', email: pool[2], body: { applicant_id: String(applicant) } })).resolved, false);
+    assert.equal((await call(path)).length, 1);
+    const submitted = await call(path, { method: 'POST', role: 'leadership', email: pool[0], body: { applicant_id: String(applicant) } });
+    assert.equal(submitted.resolved, false);
+    await call(path, { method: 'POST', role: 'leadership', email: pool[0], body: { applicant_id: String(applicant), exclude_submitted: true }, status: 403 });
+    await call(path, { method: 'POST', body: { applicant_id: String(applicant), grader_email: pool[0], exclude_submitted: true } });
+    assert.ok(await db.collection('psevaluationrevisions').findOne({ _id: revision }), 'Excluded evidence stays in history');
+    assert.equal(await db.collection('psevaluationcontributions').countDocuments({ round_id: round }), 0);
+    console.log('Phase 2 reviewer privacy, conflict reassignment, exhausted coverage and evidence-preserving admin exclusion passed.');
+  }
   if (process.argv.includes('--legacy')) {
     async function runLegacy(name, args = [], extra = {}) {
       const env = { ...process.env, MONGODB_URI: uri, SECURITY_INDEX_DB_NAME: 'ps_http_tests', SECURITY_INDEX_EXPECTED_CYCLE_ID: String(cycleId), ...extra }
@@ -386,6 +511,7 @@ try {
     await runLegacy('race-toctou.mjs', [], { ALLOW_DESTRUCTIVE_TESTS: '1', RACE_TEST_BASE_URL: base, RACE_TEST_MONGODB_URI: uri, RACE_TEST_ATTEMPTS: '5', RACE_TEST_STATE_ATTEMPTS: '2', RACE_TEST_ACTIVITY_HIERARCHY_ATTEMPTS: '2', RACE_TEST_CANDIDATES_PER_IMPORT: '100', RACE_TEST_REQUEST_TIMEOUT_MS: '60000' })
     await runLegacy('loadtest.mjs', [], { ALLOW_DESTRUCTIVE_TESTS: '1', LOAD_TEST_BASE_URL: base, LOAD_TEST_USERS: '5', LOAD_TEST_ACTIONS_PER_USER: '20', LOAD_TEST_CANDIDATES: '5', LOAD_TEST_REQUEST_TIMEOUT_MS: '60000' })
   }
+  await latePhases({ call, base, mongoose, emails })
   if (process.argv.includes('--browser')) {
     const browserCycle = new mongoose.Types.ObjectId()
     await mongoose.connection.collection('recruitmentcycles').insertOne({ _id: browserCycle, name: 'V2 browser QA', status: 'active', configuration_version: 0, lifecycle_write_count: 0 })

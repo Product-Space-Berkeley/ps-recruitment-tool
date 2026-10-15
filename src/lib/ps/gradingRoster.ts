@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import { Applicant, GraderAssignment, RecruitmentCycle } from '@/lib/models'
-import { CandidateRound, PSEvaluationContribution, PSEvaluationRevision, RubricVersion } from './models'
+import { ReviewConflict, CandidateRound, PSEvaluationContribution, PSEvaluationRevision, RubricVersion } from './models'
 import { WorkflowError } from './domain'
 import { psRound } from './rounds'
 import { serialize } from './records'
@@ -27,6 +27,7 @@ export async function gradingRoster(roundId: string, grader: string) {
   const mineByApplicant = new Map(evaluations.filter(e => credits(e) || credits(contributionFor(e)!)).map(e => [String(e.applicant_id), e]))
   // Earlier rubric versions a grader's own evaluation used stay available for updating it.
   const versions = await RubricVersion.find({ _id: mongoose.trusted({ $in: [...new Set([...mineByApplicant.values()].map(e => String(e.rubric_version_id)))] }) }).lean()
+  const conflicts = await ReviewConflict.find({ round_id: roundId, grader_email: grader }).select('applicant_id').lean()
   const candidates = applicants.map(a => {
     const id = String(a._id), count = evaluations.filter(e => String(e.applicant_id) === id).length
     const mine = mineByApplicant.get(id) ?? null
@@ -34,7 +35,7 @@ export async function gradingRoster(roundId: string, grader: string) {
     return {
       applicant_id: id, name: `${a.first_name} ${a.last_name}`, first_name: a.first_name, last_name: a.last_name, major: a.major ?? '', year: a.year ?? '', time_commitment: a.time_commitment ?? '',
       evaluations: count, required: round.reviews_required, status: count >= round.reviews_required ? 'reviewed' : count ? 'in_progress' : 'needs_review',
-      can_grade: assigned, mine: mine ? serialize(mine) : null,
+      can_grade: assigned && !conflicts.some(c => String(c.applicant_id) === id), conflicted: conflicts.some(c => String(c.applicant_id) === id), mine: mine ? serialize(mine) : null,
     }
   })
   return {

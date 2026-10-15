@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { signIn, signOut, useSession } from 'next-auth/react'
+import { applicationWording, type ApplicationWording } from '@/lib/applicationWording'
 import { APPLICATIONS_LAUNCHED } from '@/lib/applicationStatus'
 import { isBerkeleyEmail } from '@/lib/emailValidation'
 import {
@@ -13,7 +14,7 @@ import {
 } from '@/lib/applicationFields'
 
 interface EssayPrompt { id: string; question_number: number; prompt: string; description: string | null; word_limit: number | null }
-interface Cycle { id: string; name: string; accepting_applications: boolean; status: string; application_deadline: string | null }
+interface Cycle { application_wording?: ApplicationWording; id: string; name: string; accepting_applications: boolean; status: string; application_deadline: string | null }
 
 // '' = unanswered; 'confirm' = the standard confirmation; 'other' = explained conflict
 type AvailabilityChoice = '' | 'confirm' | 'other'
@@ -153,6 +154,7 @@ export default function ApplicationForm() {
   const [draftMessage, setDraftMessage] = useState('')
   const submittedRef = useRef(false)
   const latestDraftRef = useRef<{ key: string; value: string } | null>(null)
+  const wording = applicationWording(cycle?.application_wording)
   const draftKey = cycle && authEmail ? draftStorageKey(cycle.id, authEmail) : ''
 
   useEffect(() => {
@@ -170,10 +172,12 @@ export default function ApplicationForm() {
         if (!res.ok) throw new Error('Unable to load the active recruitment cycle.')
         const cycles: unknown = await res.json()
         if (!Array.isArray(cycles)) throw new Error('The recruitment-cycle response was invalid.')
+        const requestedCycle = new URLSearchParams(window.location.search).get('cycle')
         const active = cycles.find((candidate): candidate is Cycle => (
           typeof candidate === 'object'
           && candidate !== null
           && typeof candidate.id === 'string'
+          && (!requestedCycle || candidate.id === requestedCycle)
           && candidate.status === 'active'
           && candidate.accepting_applications === true
         )) ?? null
@@ -338,11 +342,11 @@ export default function ApplicationForm() {
     if (!resumeFile) add('resume', 'Resume', fileErrors.resume || 'Upload your resume as a PDF (3MB max).')
     if (!photoFile) add('photo', 'Photo', fileErrors.photo || 'Upload a photo of yourself as a JPG or PNG (2MB max).')
     if (!commitments.trim()) add('commitments', 'Commitments', 'List your commitments this semester, with the estimated hours per week for each.')
-    if (!meetingChoice) add('meeting', 'Thursday meetings', 'Confirm you can attend Thursday meetings (8:00 - 9:30 PM), or choose "Other" and explain your conflict.')
-    else if (meetingChoice === 'other' && !meetingOther.trim()) add('meeting', 'Thursday meetings', 'You chose "Other". Briefly explain your conflict in the box below it.')
-    if (!retreatChoice) add('retreat', 'Retreat', 'Confirm you blocked the retreat dates (9/18 - 9/20), or choose "Other" and explain your conflict.')
+    if (!meetingChoice) add('meeting', 'General meetings', 'Confirm you can attend the meeting time listed below, or choose "Other" and explain your conflict.')
+    else if (meetingChoice === 'other' && !meetingOther.trim()) add('meeting', 'General meetings', 'You chose "Other". Briefly explain your conflict in the box below it.')
+    if (!retreatChoice) add('retreat', 'Retreat', 'Confirm you blocked the retreat dates listed below, or choose "Other" and explain your conflict.')
     else if (retreatChoice === 'other' && !retreatOther.trim()) add('retreat', 'Retreat', 'You chose "Other". Briefly explain your conflict in the box below it.')
-    if (!hoursConfirmed) add('hours', '15 hours a week', 'Check the box to confirm you can dedicate at least 15 hours a week.')
+    if (!hoursConfirmed) add('hours', 'Weekly commitment', 'Check the box to confirm the weekly commitment listed below.')
     prompts.forEach((prompt, i) => {
       const key = `answer_${prompt.id}`
       const answer = (answers[key] ?? '').trim()
@@ -435,7 +439,7 @@ export default function ApplicationForm() {
       }
       if (wrongAccount) await signOut({ redirect: false })
       // `hd` asks Google to suggest berkeley.edu accounts; the server still checks.
-      void signIn('google', { callbackUrl: '/apply/form' }, { hd: 'berkeley.edu', prompt: 'select_account' })
+      void signIn('google', { callbackUrl: `/apply/form${window.location.search}` }, { hd: 'berkeley.edu', prompt: 'select_account' })
     }
     return (
       <div className="apply-page">
@@ -590,7 +594,8 @@ export default function ApplicationForm() {
         </div>
 
         <AvailabilityField
-          label="Our mandatory general meetings are weekly on Thursdays from 8:00 - 9:30 PM. Please plan to keep this time available if possible."
+          label={wording.meeting_prompt}
+          hint={wording.availability_hint}
           name="meeting"
           confirmation={MEETING_CONFIRMATION}
           choice={meetingChoice}
@@ -601,7 +606,8 @@ export default function ApplicationForm() {
         />
 
         <AvailabilityField
-          label="Our retreat is tentatively scheduled for 9/18 - 9/20. Just in case, please add a calendar reminder for these dates."
+          label={wording.retreat_prompt}
+          hint={wording.availability_hint}
           name="retreat"
           confirmation={RETREAT_CONFIRMATION}
           choice={retreatChoice}
@@ -612,10 +618,10 @@ export default function ApplicationForm() {
         />
 
         <div className="apply-field">
-          <label>Please confirm that you are able to dedicate at least 15 hours a week to Product Space (meetings, socials, &amp; assignments).</label>
+          <label>Please confirm that you are able to dedicate at least {wording.weekly_hours} hours a week to Product Space (meetings, socials, &amp; assignments).</label>
           <label className="apply-choice">
             <input type="checkbox" checked={hoursConfirmed} onChange={e => setHoursConfirmed(e.target.checked)} />
-            Yes, I can dedicate 15 hours a week.
+            Yes, I can dedicate {wording.weekly_hours} hours a week.
           </label>
           {fieldError('hours') && <p className="apply-warning">{fieldError('hours')}</p>}
         </div>
@@ -741,8 +747,9 @@ function ChoiceField({ label, name, options, value, onChange, error, optional }:
   )
 }
 
-function AvailabilityField({ label, name, confirmation, choice, other, onChoice, onOther, error }: {
+function AvailabilityField({ label, hint, name, confirmation, choice, other, onChoice, onOther, error }: {
   label: string
+  hint: string
   name: string
   confirmation: string
   choice: AvailabilityChoice
@@ -754,7 +761,7 @@ function AvailabilityField({ label, name, confirmation, choice, other, onChoice,
   return (
     <div className="apply-field" role="radiogroup" aria-label={label}>
       <label>{label}</label>
-      <p className="apply-hint">If you have a time conflict, feel free to select &quot;Other&quot; and briefly explain. This will <strong>NOT</strong> impact or disqualify your application.</p>
+      <p className="apply-hint">{hint}</p>
       <label className="apply-choice">
         <input type="radio" name={name} checked={choice === 'confirm'} onChange={() => onChoice('confirm')} />
         {confirmation}

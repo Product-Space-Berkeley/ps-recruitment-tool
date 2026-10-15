@@ -30,6 +30,7 @@ export async function GET() {
         status: c.status,
         accepting_applications: c.accepting_applications,
         application_deadline: c.application_deadline,
+        application_wording: c.application_wording,
       })
   return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
 }

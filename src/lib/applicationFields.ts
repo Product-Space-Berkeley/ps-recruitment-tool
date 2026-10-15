@@ -1,6 +1,6 @@
 // Options and limits shared by the application form and the submission API.
 
-export const APPLICANT_YEARS = ['Freshman', 'Sophomore', 'Junior (non-transfer)', 'Junior (transfer)', 'Senior']
+export const APPLICANT_YEARS = ['Freshman', 'Sophomore', 'Junior (non-transfer)', 'Junior (transfer)']
 
 export const RACE_OPTIONS = [
   'American Indian or Alaska Native',

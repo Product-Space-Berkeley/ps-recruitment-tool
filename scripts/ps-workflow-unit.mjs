@@ -11,11 +11,28 @@ import ts from 'typescript'
 const dir = await mkdtemp(join(tmpdir(), 'ps-workflow-'))
 try {
   await symlink(resolve('node_modules'), join(dir, 'node_modules'), 'dir')
-  const files = ['domain', 'assignments', 'rubrics', 'scoring', 'client', 'rubricV2', 'rubricCompatibility', 'rubricImport', 'rubricBuilder', 'weightedRubric', 'points', 'templates', 'candidateScores']
+  const files = ['normalization', 'domain', 'assignments', 'rubrics', 'scoring', 'client', 'rubricV2', 'rubricCompatibility', 'rubricImport', 'rubricBuilder', 'weightedRubric', 'points', 'templates', 'candidateScores']
   for (const name of files) {
     const source = await readFile(`src/lib/ps/${name}.ts`, 'utf8')
     const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText.replace(/(['\"])(\.\/[^'\"]+)\1/g, (_, quote, name) => `${quote}${name}.mjs${quote}`)
     await writeFile(join(dir, `${name}.mjs`), result)
+  }
+  {
+  const { normalizeRound } = await import(pathToFileURL(join(dir, 'normalization.mjs')))
+  const cohort = Array.from({length: 12}, (_, i) => ({id: String(i), year: 'Freshman'}))
+  const evals = cohort.flatMap((a,i) => ['a','b'].map(grader => ({applicant_id:a.id, grader, score:i + (grader === 'b' ? 10 : 0), max_points:30})))
+  const normal = normalizeRound(cohort, evals)
+  assert.equal(normal.filter(r => r.recommendation === 'green').length, 5)
+  assert.equal(normal.filter(r => r.recommendation === 'red').length, 5)
+  assert.ok(normal.every(r => Math.abs(r.reviewer_z[0].z - r.reviewer_z[1].z) < 1e-9))
+  assert.ok(normalizeRound(cohort, evals.map(e => ({...e, score:1}))).every(r => r.z === null && r.recommendation === 'yellow'))
+  assert.ok(normalizeRound(cohort.slice(0,2), evals.filter(e => Number(e.applicant_id)<2)).every(r => r.z === null))
+  assert.ok(normalizeRound(cohort, evals.filter(e => e.applicant_id !== '0' || e.grader === 'a')).every(r => r.recommendation === 'yellow'))
+  assert.ok(normalizeRound(cohort.slice(0,9), evals.filter(e => Number(e.applicant_id)<9)).every(r => r.recommendation === 'yellow'))
+  const juniors = cohort.slice(0,6).map(a => ({...a,year:'Junior (Transfer)'}))
+  assert.equal(normalizeRound(juniors,evals.filter(e => Number(e.applicant_id)<6)).filter(r => r.recommendation === 'green').length,3)
+  const tied = normalizeRound(cohort,evals.map(e => ({...e,score:['6','7'].includes(e.applicant_id) ? 7 : Number(e.applicant_id)})))
+  assert.equal(tied.find(r => r.applicant_id === '7').recommendation,'yellow')
   }
   const d = await import(pathToFileURL(join(dir, 'domain.mjs')))
   const rounds = [{ id: 'a', order_index: 4 }, { id: 'c', order_index: 12 }, { id: 'b', order_index: 7 }]
@@ -42,6 +59,25 @@ try {
     assert.throws(() => planAssignments({ ...input, reviewsRequired: graders + 1 }))
   }
   const fixed = { applicant_id: 'a', grader_email: 'a@example.test' }
+  {
+    const ids = Array.from({ length: 53 }, (_, i) => `cohort-${i}`);
+    const graders = Array.from({ length: 7 }, (_, i) => `board${i}@example.test`);
+    const cohorts = Object.fromEntries(ids.map((id, i) => [id, i < 25 ? 'freshman' : i < 45 ? 'sophomore' : 'junior']));
+    const input = { applicantIds: ids, eligibleEmails: graders, reviewsRequired: 2, applicantCohorts: cohorts, seed: 'balanced' };
+    const plan = planAssignments(input);
+    assert.equal(plan.total, ids.length * 2); assert.ok(plan.spread <= 1);
+    for (const id of ids) assert.equal(new Set(plan.rows.filter(p => p.applicant_id === id).map(p => p.grader_email)).size, 2);
+    for (const group of ['freshman', 'sophomore', 'junior']) {
+      const loads = graders.map(email => plan.rows.filter(p => p.grader_email === email && cohorts[p.applicant_id] === group).length);
+      assert.ok(Math.max(...loads) - Math.min(...loads) <= 2);
+    }
+    assert.equal(planAssignments({ ...input, existing: plan.rows }).additions.length, 0);
+  }
+  {
+    const input = { applicantIds: ['conflict-test'], eligibleEmails: ['a@x.test', 'b@x.test', 'c@x.test'], reviewsRequired: 2, excluded: [{ applicant_id: 'conflict-test', grader_email: 'a@x.test' }] };
+    assert.deepEqual(planAssignments(input).rows.map(r => r.grader_email), ['b@x.test', 'c@x.test']);
+    assert.throws(() => planAssignments({ ...input, eligibleEmails: ['a@x.test', 'b@x.test'] }), /conflict-free/);
+  }
   const preserved = planAssignments({ applicantIds: ['a', 'b'], eligibleEmails: ['a@example.test', 'b@example.test'], reviewsRequired: 2, completed: [fixed] })
   assert.ok(preserved.rows.some(r => r.applicant_id === fixed.applicant_id && r.grader_email === fixed.grader_email))
   // A removed grader's completed review still counts; their unstarted work is released and reassigned.

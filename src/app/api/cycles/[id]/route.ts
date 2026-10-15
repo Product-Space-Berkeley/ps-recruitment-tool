@@ -23,6 +23,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Whitelist only patchable fields
   const allowed: Record<string, unknown> = {}
+  if ('application_wording' in body) {
+    if (auth.role !== 'admin') return NextResponse.json({ error: 'Only admins can edit application wording.' }, { status: 403 })
+    const raw = body.application_wording
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return NextResponse.json({ error: 'Invalid application wording.' }, { status: 400 })
+    const value = raw as Record<string, unknown>
+    const fields = ['meeting_prompt', 'retreat_prompt', 'availability_hint']
+    if (fields.some(key => typeof value[key] !== 'string' || !value[key].trim() || value[key].length > 2000)
+      || typeof value.weekly_hours !== 'number' || !Number.isInteger(value.weekly_hours) || value.weekly_hours < 1 || value.weekly_hours > 168) {
+      return NextResponse.json({ error: 'Enter each prompt (up to 2,000 characters) and weekly hours between 1 and 168.' }, { status: 400 })
+    }
+    allowed.application_wording = Object.fromEntries([...fields.map(key => [key, (value[key] as string).trim()]), ['weekly_hours', value.weekly_hours]])
+  }
   if ('name' in body) {
     if (!isNonEmptyString(body.name, 100)) return NextResponse.json({ error: 'Invalid cycle name.' }, { status: 400 })
     allowed.name = body.name.trim()
@@ -63,6 +75,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await mongoose.connection.transaction(async session => {
       const current = await RecruitmentCycle.findById(id).session(session).lean()
       if (!current) { conflict = 'missing'; return }
+      if (allowed.application_wording && (current.status !== 'active' || current.accepting_applications || current.submission_count > 0 || await Applicant.exists({ cycle_id: id }).session(session))) {
+        conflict = 'wording-locked'; return
+      }
 
       const resultingStatus = allowed.status ?? current.status
       const resultingAccepting = typeof allowed.accepting_applications === 'boolean'
@@ -174,6 +189,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  if (conflict === 'wording-locked') return NextResponse.json({ error: 'Close applications before editing wording. Wording is locked once someone has applied or the cycle has ended.' }, { status: 409 })
   if (conflict === 'missing') return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (conflict === 'requirements') {
     return NextResponse.json(
@@ -194,21 +210,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole('leadership')
+  const auth = await requireRole('admin')
   if (auth instanceof NextResponse) return auth
 
   await connectDB()
   const { id } = await params
   if (!isObjectId(id)) return NextResponse.json({ error: 'Invalid cycle id.' }, { status: 400 })
-  if (await Round.exists({ cycle_id: id, workflow: 'ps' })) return NextResponse.json({ error: 'This cycle contains configured PS rounds. End the cycle to preserve its grading history.' }, { status: 409 })
 
   let existed = false
-  let protectedPSHistory = false
+  let activeCycle = false
   await mongoose.connection.transaction(async session => {
-    protectedPSHistory = false
-    const cycle = await RecruitmentCycle.findOneAndUpdate({ _id: id }, { $inc: { lifecycle_write_count: 1 } }, { session, returnDocument: 'after' }).select('_id').lean()
+    activeCycle = false
+    existed = false
+    const cycle = await RecruitmentCycle.findOneAndUpdate({ _id: id }, { $inc: { lifecycle_write_count: 1 } }, { session, returnDocument: 'after' }).select('_id status').lean()
     if (!cycle) return
-    if (await Round.exists({ cycle_id: id, workflow: 'ps' }).session(session)) { protectedPSHistory = true; return }
+    if (cycle.status !== 'ended') { activeCycle = true; return }
     existed = true
 
     // MongoDB transaction operations must be serialized; Promise.all inside a
@@ -244,16 +260,28 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     if (candidateIds.length) await Vote.deleteMany({ candidate_id: mongoose.trusted({ $in: candidateIds }) }, { session })
     if (candidateIds.length) await CandidateNote.deleteMany({ candidate_id: mongoose.trusted({ $in: candidateIds }) }, { session })
     if (candidateIds.length) await Candidate.deleteMany({ _id: mongoose.trusted({ $in: candidateIds }) }, { session })
+    if (sessionIds.length) await mongoose.connection.collection('socialcards').deleteMany({ session_id: { $in: sessionIds } }, { session })
     if (sessionIds.length) await SessionMember.deleteMany({ session_id: mongoose.trusted({ $in: sessionIds }) }, { session })
     if (sessionIds.length) await SessionBan.deleteMany({ session_id: mongoose.trusted({ $in: sessionIds }) }, { session })
     if (sessionIds.length) await DeliberationSession.deleteMany({ _id: mongoose.trusted({ $in: sessionIds }) }, { session })
+    // Permanent cycle deletion is the explicit exception to append-only grading
+    // records. Native collection operations remain scoped to this ended cycle
+    // and participate in the same transaction as the rest of the cascade.
+    if (roundIds.length) {
+      const filter = { round_id: { $in: roundIds } }
+      const versions = await mongoose.connection.collection('rubricversions').find(filter, { session, projection: { _id: 1 } }).toArray()
+      await mongoose.connection.collection('rubricscoringconfigurations').deleteMany({ rubric_version_id: { $in: versions.map(v => v._id) } }, { session })
+      for (const collection of ['outboxes', 'interviewslots', 'interviewbookings', 'reviewconflicts', 'candidaterounds', 'rubricdrafts', 'rubricversions', 'genericreviews', 'psevaluationrevisions', 'psevaluationcontributions', 'candidateroundscores']) {
+        await mongoose.connection.collection(collection).deleteMany(filter, { session })
+      }
+    }
     await Round.deleteMany({ cycle_id: id }, { session })
     await Applicant.deleteMany({ cycle_id: id }, { session })
     await EssayPrompt.deleteMany({ cycle_id: id }, { session })
     await CoffeeChatNote.deleteMany({ cycle_id: id }, { session })
     await RecruitmentCycle.deleteOne({ _id: id }, { session })
   })
-  if (protectedPSHistory) return NextResponse.json({ error: 'This cycle contains configured PS rounds. End the cycle to preserve its grading history.' }, { status: 409 })
+  if (activeCycle) return NextResponse.json({ error: 'End the cycle before deleting it.' }, { status: 409 })
   if (!existed) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

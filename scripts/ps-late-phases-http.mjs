@@ -1,0 +1,89 @@
+import assert from 'node:assert/strict'
+export async function latePhases({call,base,mongoose,emails}) {
+ const db=mongoose.connection,oid=()=>new mongoose.Types.ObjectId(),cycle=oid(),round=oid(),a=oid(),b=oid()
+ await db.collection('authorizedusers').updateMany({email:{$in:emails}},{$set:{role:'leadership'}})
+ await db.collection('recruitmentcycles').insertOne({_id:cycle,name:'Scheduling fixture',status:'active'})
+ await db.collection('rounds').insertOne({_id:round,cycle_id:cycle,workflow:'ps',name:'Take-home',status:'pending',archived:false,order_index:1,reviews_required:2,assignment_mode:'individual',grading_access:'assigned',eligible_grader_emails:emails,rubric_version_id:oid()})
+ await db.collection('applicants').insertMany([a,b].map((id,i)=>({_id:id,cycle_id:cycle,first_name:'Scheduling '+i,last_name:'Test',year:'Junior (Transfer)',email:`schedule${i}@example.test`})))
+ await db.collection('candidaterounds').insertMany([a,b].map(id=>({round_id:round,cycle_id:cycle,applicant_id:id,state:'pending',events:[]})))
+ const url=`/api/ps/rounds/${round}/schedule`,start=new Date(Date.now()+7*86400000).toISOString()
+ await call(url,{method:'POST',role:'leadership',email:emails[0],body:{action:'create_slots',start,location:'Campus'},status:403})
+ await call(url,{method:'POST',body:{action:'create_slots',start,duration:45,break_minutes:15,count:2,capacity:1,location:'Campus',cutoff_hours:24}})
+ const slots=(await call(url)).slots
+ assert.equal(new Date(slots[1].start)-new Date(slots[0].start),3600000)
+ for(const slot of slots)for(const email of emails)await call(url,{method:'POST',role:'leadership',email,body:{action:'availability',slot_id:slot.id,available:true}})
+ const links=[];for(const id of [a,b])links.push((await call(url,{method:'POST',body:{action:'invite',applicant_id:String(id)}})).token)
+ async function book(token,slot){const res=await fetch(base+'/api/booking',{method:'POST',headers:{'Content-Type':'application/json','x-booking-token':token,origin:base},body:JSON.stringify({slot_id:slot})});return {status:res.status,data:await res.json()}}
+ const collision=await Promise.all(links.map(token=>book(token,slots[0].id)))
+ assert.deepEqual(collision.map(r=>r.status).sort(),[200,409],JSON.stringify(collision))
+ const winner=collision.findIndex(r=>r.status===200),loser=1-winner
+ assert.equal((await book(links[loser],slots[1].id)).status,200)
+ const bookings=(await call(url)).bookings
+ assert.ok(bookings.every(x=>x.interviewers.length===2))
+ assert.equal(await db.collection('graderassignments').countDocuments({round_id:round}),4)
+ await call(`/api/ps/rounds/${round}/assignments`,{status:409})
+ const first=bookings.find(x=>x.slot_id===slots[0].id)
+ const removed=first.interviewers[0]
+ await call(url,{method:'POST',role:'leadership',email:removed,body:{action:'availability',slot_id:slots[0].id,available:false}})
+ const replaced=(await call(url)).bookings.find(x=>x.id===first.id)
+ assert.equal(replaced.interviewers.length,2);assert.ok(!replaced.interviewers.includes(removed))
+ await db.collection('interviewslots').updateOne({_id:new mongoose.Types.ObjectId(slots[0].id)},{$set:{start:new Date(Date.now()+3600000)}})
+ assert.equal((await book(links[winner],slots[1].id)).status,409)
+ assert.equal((await book('bad',slots[1].id)).status,404)
+ const fresh=(await call(url,{method:'POST',body:{action:'invite',applicant_id:String(winner===0?a:b)}})).token
+ assert.notEqual(fresh,links[winner]);assert.equal((await book(links[winner],slots[0].id)).status,404)
+ console.log('Phase 4 scheduling: concurrent capacity, independent assignments, availability replacement, cutoff, invalid/replaced links and authorization passed.')
+ // Final-room social membership, ownership, host moderation and polling readback.
+ await db.collection('rounds').updateOne({_id:round},{$set:{status:'deliberating'}})
+ await db.collection('candidaterounds').updateMany({round_id:round},{$set:{state:'hold'}})
+ const room=await call(`/api/ps/rounds/${round}/deliberation`,{method:'POST',body:{}})
+ const candidates=await call(`/api/sessions/${room.id}/candidates`),cid=candidates[0].id
+ await db.collection('sessionmembers').insertMany(emails.slice(0,2).map(user_email=>({session_id:room.id,user_email})))
+ const social=`/api/ps/sessions/${room.id}/social/${cid}`
+ await call(social,{role:'grader',email:'outsider@example.test',status:403})
+ await call(social,{method:'POST',role:'leadership',email:emails[0],body:{color:'green',text:'Helped the group include everyone.'}})
+ let card=(await call(social,{role:'leadership',email:emails[1]})).cards[0]
+ assert.equal(card.author,emails[0]);assert.equal(card.color,'green')
+ await call(social,{method:'POST',role:'leadership',email:emails[1],body:{...card,text:'Changed'},status:403})
+ await call(social,{method:'POST',role:'leadership',email:emails[0],body:{...card,color:'yellow',text:'Follow up about collaboration.'}})
+ await call(social,{method:'POST',role:'leadership',email:emails[0],body:{...card,text:'Stale edit'},status:409})
+ card=(await call(social)).cards[0];assert.equal(card.color,'yellow')
+ await call(social,{method:'POST',body:{id:card.id,revision:card.revision,action:'delete'}})
+ assert.equal((await call(social)).cards.length,0)
+ console.log('Phase 5 social cards: membership, authored visibility, edit ownership, stale-edit rejection and host moderation passed.')
+ // Provider calls are replaced in the disposable app; no real Google account or mail.
+ const connect=await call('/api/ps/mail',{method:'POST',body:{action:'connect'}}),state=new URL(connect.url).searchParams.get('state')
+ await call('/api/ps/mail',{method:'POST',role:'leadership',email:emails[0],body:{action:'connect'},status:403})
+ const headers={'x-test-role':'admin','x-test-email':'lead@example.test'}
+ const consent=await fetch(base+`/api/ps/mail/callback?state=${state}&code=fake`,{headers,redirect:'manual'})
+ assert.equal(consent.status,307)
+ await call(`/api/ps/mail/callback?state=${state}&code=fake`,{status:409})
+ const mailbox=await db.collection('mailboxes').findOne({owner:'lead@example.test'});assert.ok(mailbox.encrypted_refresh&&!mailbox.encrypted_refresh.includes('fake-refresh'))
+ const mailurl=`/api/ps/mail?round_id=${round}`
+ const preview={action:'preview',round_id:String(round),kind:'rejection',subject:'Decision for {{first_name}}',body:'Hi {{first_name}}, thank you for applying.'}
+ assert.equal((await call('/api/ps/mail',{method:'POST',body:preview})).messages.length,0,'provisional colors do not create outcome emails')
+ for(const c of candidates)await call(`/api/candidates/${c.id}`,{method:'PATCH',body:{status:'rejected'}})
+ await call(`/api/ps/sessions/${room.id}/finish`,{method:'POST',body:{}})
+ await call(social,{method:'POST',body:{color:'red',text:'Closed'},status:409})
+ await call('/api/ps/mail',{method:'POST',body:{...preview,body:'{{private_scores}}'},status:400})
+ let drafts=await call('/api/ps/mail',{method:'POST',body:preview});assert.equal(drafts.messages.length,2)
+ drafts=await call('/api/ps/mail',{method:'POST',body:preview});assert.equal(drafts.messages.length,2)
+ assert.ok(drafts.messages.every(m=>m.status==='draft'))
+ const ids=drafts.messages.map(m=>m.id)
+ await Promise.all([call('/api/ps/mail',{method:'POST',body:{action:'send',ids}}),call('/api/ps/mail',{method:'POST',body:{action:'send',ids}})])
+ const sent=(await call(mailurl)).messages;assert.ok(sent.every(m=>m.status==='sent'&&m.attempts.length===2))
+ await call('/api/ps/mail',{method:'POST',body:{action:'send',ids}})
+ assert.ok((await call(mailurl)).messages.every(m=>m.attempts.length===2))
+ const failures=await call('/api/ps/mail',{method:'POST',body:{...preview,subject:'FAIL'}})
+ const fail=failures.messages.filter(m=>m.status==='draft').map(m=>m.id)
+ await call('/api/ps/mail',{method:'POST',body:{action:'send',ids:fail}})
+ assert.ok((await call(mailurl)).messages.filter(m=>fail.includes(m.id)).every(m=>m.status==='failed'))
+ const uncertain=await call('/api/ps/mail',{method:'POST',body:{...preview,subject:'UNKNOWN'}})
+ const unknown=uncertain.messages.filter(m=>m.status==='draft').map(m=>m.id)
+ await call('/api/ps/mail',{method:'POST',body:{action:'send',ids:unknown}})
+ await call('/api/ps/mail',{method:'POST',body:{action:'send',ids:unknown}})
+ assert.ok((await call(mailurl)).messages.filter(m=>unknown.includes(m.id)).every(m=>m.status==='unknown'&&m.attempts.length===2))
+ await call('/api/ps/mail',{method:'POST',body:{action:'disconnect'}})
+ assert.equal((await call(mailurl)).mailbox,null)
+ console.log('Phase 6 mail: OAuth state/replay, encrypted storage, draft preview, finalized-only recipients, concurrency/idempotency, rejected/uncertain delivery and disconnect passed with a fake provider.')
+}

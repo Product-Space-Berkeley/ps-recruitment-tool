@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
-import { GraderAssignment } from '@/lib/models'
+import { normalizeRound, NORMALIZATION_POLICY } from './normalization'
+import { Applicant, GraderAssignment } from '@/lib/models'
 import { CandidateRound, CandidateRoundScore, GenericReview, PSEvaluationContribution, PSEvaluationRevision } from './models'
 import { aggregateEvaluations, type Evaluation } from './weightedRubric'
 import { unconfiguredScores, type RawReview } from './scoring'
@@ -25,7 +26,10 @@ export async function liveRoundScores(round: RoundLike, tx?: mongoose.ClientSess
   }
   const scored: ScoredEvaluation[] = points.map(e => ({ id: String(e._id), applicant_id: String(e.applicant_id), grader: graderOf(contributions.find(c => String(c.evaluation_id) === String(e._id))!), score: e.score, max_points: e.max_points!, percent: e.percent ?? 0 }))
   const applicantIds = enrollments.map(e => String(e.applicant_id))
+  const people = await Applicant.find({ _id: mongoose.trusted({ $in: applicantIds }) }).select('_id year').session(s).lean()
+  const normalized = normalizeRound(people.map(a => ({ id: String(a._id), year: a.year ?? '' })), scored, round.reviews_required)
   return {
+    normalization_policy: NORMALIZATION_POLICY, normalized,
     status: points.length || weighted.length ? 'calculated' : 'unconfigured',
     engine: points.length ? CANDIDATE_ENGINE : null,
     candidates: points.length ? candidateScores(applicantIds, scored, round.reviews_required) : [],
@@ -34,11 +38,11 @@ export async function liveRoundScores(round: RoundLike, tx?: mongoose.ClientSess
     scores: unconfiguredScores(String(id), applicantIds, reviews.map(serialize) as RawReview[]),
   }
 }
-export type FrozenScore = CandidateScore & { frozen_at: string; close_id: string }
+export type FrozenScore = CandidateScore & { normalization: (import('./normalization').Normalized & { policy: string }) | null; frozen_at: string; close_id: string }
 // The most recent close of a round; earlier snapshots stay in history.
 export async function frozenRoundScores(roundId: unknown): Promise<FrozenScore[]> {
   const last = await CandidateRoundScore.findOne({ round_id: roundId, close_id: mongoose.trusted({ $ne: null }) }).sort({ created_at: -1 }).lean()
   if (!last) return []
   const rows = await CandidateRoundScore.find({ round_id: roundId, close_id: last.close_id }).lean()
-  return rows.map(r => ({ applicant_id: String(r.applicant_id), reviews: r.reviews, required: r.required, complete: r.complete, score: r.score, percent: r.percent, low: r.low, high: r.high, max_points: r.max_points, input_review_ids: r.input_review_ids.map(String), frozen_at: new Date(r.created_at).toISOString(), close_id: String(r.close_id) }))
+  return rows.map(r => ({ applicant_id: String(r.applicant_id), reviews: r.reviews, required: r.required, complete: r.complete, score: r.score, percent: r.percent, low: r.low, high: r.high, max_points: r.max_points, input_review_ids: r.input_review_ids.map(String), normalization: r.normalization ?? null, frozen_at: new Date(r.created_at).toISOString(), close_id: String(r.close_id) }))
 }

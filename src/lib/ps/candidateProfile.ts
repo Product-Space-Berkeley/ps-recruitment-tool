@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { completedReviewApplicants } from './reviewPrivacy'
 import { Applicant, RecruitmentCycle, Round } from '@/lib/models'
 import { CandidateRound, PSEvaluationContribution, PSEvaluationRevision, RubricVersion } from './models'
 import { WorkflowError } from './domain'
@@ -30,7 +31,8 @@ export async function candidateProfile(applicantId: string) {
   for (const round of rounds) {
     const enrollment = enrollments.find(e => String(e.round_id) === String(round._id))
     const score = enrollment ? (await scoresFor(round)).get(applicantId) ?? null : null
-    const evaluations = current.filter(e => String(e.round_id) === String(round._id)).map(e => ({
+    const complete = await completedReviewApplicants(String(round._id), round.reviews_required)
+    const evaluations = current.filter(e => String(e.round_id) === String(round._id) && complete.has(applicantId)).map(e => ({
       id: String(e._id), submitted_by: e.grader_email, panel_emails: e.panel_emails ?? null, revision: e.revision, submitted_at: e.submitted_at,
       score: e.score, max_points: e.max_points ?? null, percent: e.percent ?? null, bonus_points: e.bonus_points ?? null, penalty_points: e.penalty_points ?? null,
       section_totals: e.section_totals ?? [], responses: e.responses, comments: e.comments, rubric_version_id: String(e.rubric_version_id), knows_candidate: !!e.knows_candidate,

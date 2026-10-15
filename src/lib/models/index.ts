@@ -27,6 +27,12 @@ const RecruitmentCycleSchema = new Schema({
   status:                 { type: String, enum: ['active', 'ended'], default: 'active' },
   accepting_applications: { type: Boolean, default: false },
   application_deadline:   { type: Date, default: null },
+  application_wording: { type: new Schema({
+    meeting_prompt: { type: String, required: true, maxlength: 2000 },
+    retreat_prompt: { type: String, required: true, maxlength: 2000 },
+    availability_hint: { type: String, required: true, maxlength: 2000 },
+    weekly_hours: { type: Number, required: true, min: 1, max: 168 },
+  }, { _id: false }), default: undefined },
   coffee_chat_sheet_id:   { type: String, default: null, select: false },
   coffee_chat_sheet_gid:  { type: String, default: null, select: false },
   behavioral_source: { type: Schema.Types.Mixed, default: null, select: false },
@@ -196,6 +202,8 @@ export const Review = models.Review || model('Review', ReviewSchema)
 
 // ─── Sessions (Deliberation) ─────────────────────────────────
 const SessionSchema = new Schema({
+  decisions_finalized_at: { type: Date, default: null },
+  decisions_finalized_by: { type: String, default: null },
   _id:        { type: String },  // 6-char alphanumeric custom ID
   round_id:   { type: Schema.Types.ObjectId, ref: 'Round', default: null },
   name:       { type: String, required: true },

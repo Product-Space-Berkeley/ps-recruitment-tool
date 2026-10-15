@@ -101,6 +101,8 @@ export type GradingType = 'rubric' | 'interview'
 export type UserRole = 'grader' | 'leadership' | 'admin'
 
 export interface RecruitmentCycle {
+  application_wording?: import('./applicationWording').ApplicationWording
+  submission_count?: number
   id: string
   name: string
   status: CycleStatus

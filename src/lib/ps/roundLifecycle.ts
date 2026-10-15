@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import mongoose from 'mongoose'
+import { ReviewConflict } from './models'
 import { Applicant, GraderAssignment, Round, Session } from '@/lib/models'
 import { CandidateRound, CandidateRoundScore, PSEvaluationContribution, PSEvaluationRevision } from './models'
 import { WorkflowError, pairLabel, type InterviewerPair } from './domain'
@@ -56,6 +57,7 @@ export async function closeRound(roundId: string, body: Record<string, unknown>,
   await CandidateRoundScore.init()
   await mongoose.connection.transaction(async tx => {
     const round = await lockRound(roundId, tx)
+    if (await ReviewConflict.exists({ round_id: roundId, resolved: false }).session(tx)) throw new WorkflowError('Resolve review conflicts before closing grading.', 409)
     if (round.status !== 'grading') throw new WorkflowError('Only a round that is grading can be closed.', 409)
     const enrollments = await CandidateRound.find({ round_id: roundId }).session(tx).lean()
     const waiting = enrollments.filter(e => ['pending', 'in_review'].includes(e.state))
@@ -71,6 +73,7 @@ export async function closeRound(roundId: string, body: Record<string, unknown>,
         input_review_ids: inputs, input_fingerprint: createHash('sha256').update(JSON.stringify([inputs, round.reviews_required])).digest('hex'),
         score: c?.score ?? null, percent: c?.percent ?? null, low: c?.low ?? null, high: c?.high ?? null, max_points: c?.max_points ?? null,
         reviews: c?.reviews ?? 0, required: round.reviews_required, complete: c?.complete ?? false,
+        normalization: { policy: live.normalization_policy, ...live.normalized.find(n => n.applicant_id === String(e.applicant_id)) },
         calculated_at: now, created_at: now, close_id, closed_by: actor,
       }
     })
@@ -87,6 +90,7 @@ export async function reopenRound(roundId: string) {
   await mongoose.connection.transaction(async tx => {
     const round = await lockRound(roundId, tx)
     if (round.status !== 'deliberating') throw new WorkflowError('Only a closed round can be reopened for grading.', 409)
+    if (await Session.exists({ round_id: roundId, decisions_finalized_at: mongoose.trusted({ $ne: null }) }).session(tx)) throw new WorkflowError('Finalized decisions are locked. Start a new round for corrections; historical outcomes cannot be reopened here.', 409)
     await Session.updateMany({ round_id: roundId, status: 'active' }, { $set: { status: 'ended' } }, { session: tx })
     await Round.updateOne({ _id: roundId }, { $set: { status: 'grading' }, $inc: { configuration_version: 1 } }, { session: tx })
   })

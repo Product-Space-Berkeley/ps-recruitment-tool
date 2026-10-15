@@ -4,7 +4,7 @@ import { Applicant, Round } from '@/lib/models'
 import { CandidateRound, GenericReview, PSEvaluationContribution } from '@/lib/ps/models'
 import { objectId, psApi, serialize } from '@/lib/ps/api'
 import { psRound } from '@/lib/ps/rounds'
-import { decideEnrollment, enrollFirstRound } from '@/lib/ps/enrollment'
+import { enrollFirstRound } from '@/lib/ps/enrollment'
 import { frozenRoundScores } from '@/lib/ps/scoreService'
 import { nextRound, WorkflowError } from '@/lib/ps/domain'
 import { readJsonObject } from '@/lib/apiValidation'
@@ -34,8 +34,6 @@ export async function POST(req: NextRequest, context: Context) {
       let count = 0; await mongoose.connection.transaction(async tx => { count = await enrollFirstRound(id, auth.email, tx) })
       return NextResponse.json({ ok: true, count })
     }
-    if (parsed.data.action === 'reopen' && auth.role !== 'admin') throw new WorkflowError('Only admins can reopen decisions.', 403)
-    const applicantId = String(parsed.data.applicant_id ?? ''); objectId(applicantId)
-    return NextResponse.json(await decideEnrollment(id, applicantId, String(parsed.data.action), auth.email))
+    throw new WorkflowError('Record consensus and finish decisions in the live deliberation room.', 409)
   })
 }

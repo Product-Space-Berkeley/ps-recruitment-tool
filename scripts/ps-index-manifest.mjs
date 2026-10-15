@@ -1,5 +1,14 @@
 // Additive indexes only. Existing legacy indexes are not altered or dropped.
 export const PS_INDEXES = [
+  { collection: 'reviewconflicts', key: { round_id: 1, applicant_id: 1, grader_email: 1 }, unique: true },
+  { collection: 'interviewslots', key: { round_id: 1, start: 1 }, unique: true },
+  { collection: 'interviewbookings', key: { round_id: 1, applicant_id: 1 }, unique: true },
+  { collection: 'interviewbookings', key: { token_hash: 1 }, unique: true },
+  { collection: 'socialcards', key: { session_id: 1, candidate_id: 1 } },
+  { collection: 'mailboxes', key: { owner: 1 }, unique: true },
+  { collection: 'mailconsents', key: { digest: 1 }, unique: true },
+  { collection: 'mailconsents', key: { expires: 1 }, expireAfterSeconds: 0 },
+  { collection: 'outboxes', key: { key: 1 }, unique: true },
   { collection: 'psevaluationrevisions', key: { round_id: 1, applicant_id: 1, grader_email: 1, revision: 1 }, unique: true },
   { collection: 'psevaluationrevisions', key: { grader_email: 1, round_id: 1 } },
   { collection: 'psevaluationcontributions', key: { round_id: 1, applicant_id: 1, grader_email: 1 }, unique: true },

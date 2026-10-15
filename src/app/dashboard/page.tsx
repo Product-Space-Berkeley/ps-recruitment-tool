@@ -5,7 +5,9 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { getCurrentUser, canCreateSession, canManageUsers, CurrentUser } from '@/lib/auth'
-import { Session, AuthorizedUser, Round, UserRole } from '@/lib/types'
+import { Session, AuthorizedUser, UserRole } from '@/lib/types'
+import RecruitmentNav from '@/components/RecruitmentNav'
+import DeleteSession from '@/components/DeleteSession'
 import ThemeToggle from '@/components/ThemeToggle'
 import { requestArray, requestJson } from '@/lib/ps/client'
 
@@ -15,10 +17,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [mySessions, setMySessions] = useState<Session[]>([])
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [pendingGrading, setPendingGrading] = useState<number | null>(null)
   const [sessionError, setSessionError] = useState('')
   const [sessionsLoading, setSessionsLoading] = useState(true)
-  const [gradingError, setGradingError] = useState('')
   const [initializationError, setInitializationError] = useState('')
   const [usersLoadError, setUsersLoadError] = useState('')
 
@@ -63,23 +63,6 @@ export default function Dashboard() {
     finally { setUsersLoading(false) }
   }, [])
 
-  const loadGrading = useCallback(async (email: string) => {
-    setGradingError('')
-    try {
-      type Row = { round_id: string; applicant_id: string }
-      const [assignments, reviews] = await Promise.all([
-        requestArray<Row>(`/api/grader-assignments?grader_email=${encodeURIComponent(email)}`),
-        requestArray<Row>(`/api/reviews?grader_email=${encodeURIComponent(email)}`),
-      ])
-      const roundIds = [...new Set(assignments.map(assignment => assignment.round_id))]
-      const rounds = await Promise.all(roundIds.map(id => requestJson<Round>(`/api/rounds/${id}`)))
-      const activeRoundIds = new Set(rounds.filter(round => round.status === 'grading' && round.workflow !== 'ps').map(round => round.id))
-      const assigned = assignments.filter(assignment => activeRoundIds.has(assignment.round_id)).length
-      const reviewed = reviews.filter(review => activeRoundIds.has(review.round_id)).length
-      setPendingGrading(Math.max(0, assigned - reviewed))
-    } catch (error) { setPendingGrading(null); setGradingError((error as Error).message) }
-  }, [])
-
   useEffect(() => {
     let active = true
     async function init() {
@@ -90,14 +73,14 @@ export default function Dashboard() {
         setCurrentUser(user)
         setLoading(false)
         // Each widget owns its failure state; one rejected API must not block the dashboard.
-        await Promise.all([loadSessions(user.email), loadGrading(user.email), ...(canManageUsers(user.role) ? [loadUsers()] : [])])
+        await Promise.all([loadSessions(user.email), ...(canManageUsers(user.role) ? [loadUsers()] : [])])
       } catch (error) {
         if (active) { setInitializationError((error as Error).message); setLoading(false) }
       }
     }
     void init()
     return () => { active = false }
-  }, [router, loadSessions, loadGrading, loadUsers])
+  }, [router, loadSessions, loadUsers])
 
   async function handleSignOut() {
     await signOut({ callbackUrl: '/' })
@@ -212,51 +195,20 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+      <RecruitmentNav role={currentUser?.role} />
 
       <div className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-6 pt-8">
 
-        <div className="flex gap-4 text-sm">
-          {currentUser?.role !== 'grader' && <button onClick={() => router.push('/admin/rounds')}>PS Round Setup</button>}
-          <button onClick={() => router.push('/grade/ps')}>PS Grading</button>
-        </div>
-        {/* Shortcuts */}
-        <div className={`grid gap-3 ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {isAdmin && (
-            <button
-              onClick={() => router.push('/admin')}
-              className="bg-[var(--bg-surface)] hover:bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl px-4 py-3 text-left transition-colors"
-            >
-              <p className="font-medium text-[var(--text-primary)] text-sm">Admin Console</p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">Cycles, rounds, assignments</p>
-            </button>
-          )}
-          <button
-            onClick={() => router.push('/grade')}
-            className="bg-[var(--bg-surface)] hover:bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl px-4 py-3 text-left transition-colors"
-          >
-            <div className="flex items-center justify-between">
-              <p className="font-medium text-[var(--text-primary)] text-sm">Grading Queue</p>
-              {pendingGrading !== null && pendingGrading > 0 && (
-                <span className="text-xs bg-[var(--ps-accent)] text-white font-bold px-2 py-0.5 rounded-full">
-                  {pendingGrading}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              {pendingGrading === null
-                ? 'Review applicants assigned to you'
-                : pendingGrading === 0
-                  ? 'No pending reviews'
-                  : `${pendingGrading} applicant${pendingGrading === 1 ? '' : 's'} to review`}
-            </p>
-          </button>
-        </div>
-
-        {gradingError && <div role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-[var(--text-primary)]">
-          <p>Unable to load your grading count: {gradingError}</p>
-          <button className="underline mt-2" onClick={() => void loadGrading(user.email)}>Retry grading count</button>
-        </div>}
-
+        <section className="space-y-4" aria-label="Recruitment workflow">
+          <h2 className="text-xl font-semibold">Recruitment</h2>
+          <p className="text-sm text-[var(--text-muted)]">One cycle per season. Each cycle has evaluation rounds; each round ends with a team deliberation meeting.</p>
+          <nav className="divide-y divide-[var(--border)]">
+            {isAdmin && <a href="/admin" className="block py-3"><span className="font-semibold">Applications &amp; cycles</span><p className="text-sm text-[var(--text-muted)]">Create a season, set questions and deadlines, and manage applications.</p></a>}
+            {currentUser?.role !== 'grader' && <a href="/admin/rounds" className="block py-3"><span className="font-semibold">Rounds &amp; rubrics</span><p className="text-sm text-[var(--text-muted)]">Set up stages and scoring, choose reviewers, then open deliberation.</p></a>}
+            <a href="/grade/ps" className="block py-3"><span className="font-semibold">Review candidates</span><p className="text-sm text-[var(--text-muted)]">Read applications and submit your scores for an open round.</p></a>
+          </nav>
+        </section>
+        <p className="text-sm text-[var(--text-muted)]">Joining a deliberation meeting? Enter its code below. Start recruitment-linked meetings from Rounds &amp; rubrics after closing grading.</p>
         {/* Join / Create session */}
         <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border)] overflow-hidden">
           <div className="flex border-b border-[var(--border)]">
@@ -323,8 +275,8 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Your Sessions</h2>
             <div className="space-y-2">
               {mySessions.map(session => (
+                <div key={session.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)]">
                 <button
-                  key={session.id}
                   onClick={() => router.push(`/session/${session.id}`)}
                   className="w-full flex items-center justify-between bg-[var(--bg-surface)] hover:bg-[var(--bg-raised)] border border-[var(--border)] rounded-xl px-4 py-3 transition-colors text-left"
                 >
@@ -349,6 +301,8 @@ export default function Dashboard() {
                     <span className="text-[var(--text-muted)] text-sm">→</span>
                   </div>
                 </button>
+                {canCreateSession(user.role) && <DeleteSession id={session.id} name={session.name} onDeleted={() => setMySessions(previous => previous.filter(item => item.id !== session.id))} />}
+                </div>
               ))}
             </div>
           </div>

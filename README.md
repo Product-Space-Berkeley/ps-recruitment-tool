@@ -1,5 +1,7 @@
 # Product Space @ Berkeley — Recruitment Tool
 
+> Current checkpoint is work in progress. Phases 1–2 and social-card checks pass; email sending has a known failing regression. See [phase status and resume steps](docs/RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before continuing or deploying.
+
 A recruitment portal for collecting applications, assigning reviewers, grading, importing interview and coffee-chat notes, and running candidate deliberations.
 
 Built with Next.js, React, TypeScript, NextAuth (Google sign-in), and MongoDB/Mongoose.
@@ -274,3 +276,11 @@ Keep this server local; do not expose it through a tunnel or shared deployment.
 The shortcut requires `NODE_ENV=development`, `DEV_LOGIN=1`, and a loopback
 `NEXTAUTH_URL`. It is unavailable in production even if the flag is set.
 To disable it, remove the flag and restart; existing dev sessions lose access.
+
+## Product workflow and implementation phases
+
+See [the recruitment workflow specification](docs/RECRUITMENT_WORKFLOW_SPEC.md) for the agreed written, interview, scoring, scheduling, social-night and email workflow, plus the phased implementation checklist.
+
+### Recruitment operations
+
+Use [Recruitment operations](docs/RECRUITMENT_OPERATIONS.md) for the complete cycle → written → PD → take-home/social → final decision journey, scheduling, Google sender setup, outbox behavior, rollout and handoff. The [phase checklist](docs/RECRUITMENT_WORKFLOW_SPEC.md#implementation-phases-and-acceptance-gates) distinguishes verified work from remaining acceptance checks.

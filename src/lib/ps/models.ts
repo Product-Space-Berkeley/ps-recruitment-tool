@@ -94,6 +94,7 @@ appendOnly(GenericReviewSchema)
 export const GenericReview = models.GenericReview || model('GenericReview', GenericReviewSchema)
 // Calculated outputs are separate from immutable raw reviews and are themselves append-only.
 const CandidateRoundScoreSchema = new Schema({
+  normalization: { type: Schema.Types.Mixed, default: null },
   round_id: { type: Schema.Types.ObjectId, ref: 'Round', required: true }, applicant_id: { type: Schema.Types.ObjectId, ref: 'Applicant', required: true },
   rubric_version_id: { type: Schema.Types.ObjectId, ref: 'RubricVersion', default: null },
   engine: { type: String, required: true }, engine_version: { type: String, default: null },
@@ -137,3 +138,16 @@ const PSEvaluationContributionSchema = new Schema({
 PSEvaluationContributionSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1 }, { unique: true })
 PSEvaluationContributionSchema.index({ grader_email: 1, round_id: 1 })
 export const PSEvaluationContribution = models.PSEvaluationContribution || model('PSEvaluationContribution', PSEvaluationContributionSchema)
+
+const ReviewConflictSchema = new Schema({
+  round_id: { type: Schema.Types.ObjectId, required: true },
+  applicant_id: { type: Schema.Types.ObjectId, required: true },
+  grader_email: { type: String, required: true },
+  declared_at: { type: Date, default: Date.now },
+  resolved: { type: Boolean, default: false },
+  reason: { type: String, default: 'no_replacement' },
+  excluded_review_ids: { type: [Schema.Types.ObjectId], default: [] },
+  resolved_by: { type: String, default: null },
+})
+ReviewConflictSchema.index({ round_id: 1, applicant_id: 1, grader_email: 1 }, { unique: true })
+export const ReviewConflict = models.ReviewConflict || model('ReviewConflict', ReviewConflictSchema)

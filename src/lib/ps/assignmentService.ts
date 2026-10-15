@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import mongoose from 'mongoose'
-import { AuthorizedUser, GraderAssignment, RecruitmentCycle, Review } from '@/lib/models'
-import { CandidateRound } from './models'
+import { Applicant, AuthorizedUser, GraderAssignment, RecruitmentCycle, Review } from '@/lib/models'
+import { CandidateRound, ReviewConflict } from './models'
 import { WorkflowError, pairLabel, type InterviewerPair } from './domain'
 import { planAssignments, AssignmentPair } from './assignments'
 import { firstRoundApplicants, enrollFirstRound } from './enrollment'
@@ -15,6 +15,7 @@ function units(round: { assignment_mode?: string; interviewer_pairs?: Interviewe
 const unitOf = (row: AssignmentRow, pairs: InterviewerPair[] | null) => pairs ? row.panel_id ?? `unpaired:${row.grader_email}` : row.grader_email
 async function snapshot(roundId: string, tx?: mongoose.ClientSession) {
   const round = await psRound(roundId, tx)
+  if (await mongoose.connection.collection('interviewslots').findOne({ round_id: new mongoose.Types.ObjectId(roundId) }, { session: tx })) throw new WorkflowError('Interview assignments come from bookings. Use Interview schedule.', 409)
   if (round.archived || !['pending', 'grading'].includes(round.status)) throw new WorkflowError('Assignments require a pending or active grading round.', 409)
   if (round.grading_access === 'open') throw new WorkflowError('This round uses open grading, so there is nothing to assign. Use Start grading instead.', 409)
   if (!await RecruitmentCycle.exists({ _id: round.cycle_id, status: 'active' }).session(tx ?? null)) throw new WorkflowError('An active cycle is required.', 409)
@@ -41,7 +42,11 @@ async function snapshot(roundId: string, tx?: mongoose.ClientSession) {
   const completedRows = [...genericReviews, ...contributions].map(r => pair(String(r.applicant_id), unitFor(String(r.applicant_id), String(r.grader_email))))
   const completed = [...new Map(completedRows.map(p => [`${p.applicant_id}:${p.grader_email}`, p])).values()]
   const activeIds = [...eligible].filter(id => !inactive.has(id))
-  const plan = planAssignments({ applicantIds: [...eligible], eligibleEmails: ids, reviewsRequired: round.reviews_required, existing, completed, frozenApplicantIds: [...inactive], seed: roundId })
+  const applicantRows = await Applicant.find({ _id: mongoose.trusted({ $in: [...eligible] }) }).select('_id year').session(tx ?? null).lean()
+  const applicantCohorts = Object.fromEntries(applicantRows.map(a => [String(a._id), String(a.year ?? '').split(' (')[0].trim().toLowerCase()]))
+  const conflicts = await ReviewConflict.find({ round_id: roundId }).session(tx ?? null).lean()
+  const excluded = conflicts.map(c => ({ applicant_id: String(c.applicant_id), grader_email: c.grader_email }))
+  const plan = planAssignments({ applicantIds: [...eligible], eligibleEmails: ids, reviewsRequired: round.reviews_required, existing, completed, frozenApplicantIds: [...inactive], seed: roundId, applicantCohorts, excluded })
   const label = (unit: string) => pairs?.find(p => p.id === unit) ? pairLabel(pairs.find(p => p.id === unit)!) : unit
   const token = createHash('sha256').update(JSON.stringify({ version: round.configuration_version, eligible: [...eligible].sort(), states: enrollments.map(e => [String(e.applicant_id), e.state]).sort(), assignments: existing.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), completed, rows: plan.rows, removals: plan.removals })).digest('hex')
   return { ...plan, round, pairs, assignments, workload: plan.workload.map(w => ({ ...w, email: label(w.email) })), applicants: activeIds.length, reviews_required: round.reviews_required, mode: pairs ? 'pair' : 'individual', preview_token: token, configuration_version: round.configuration_version }
@@ -97,6 +102,7 @@ export async function reassignPending(roundId: string, assignmentId: string, tar
     if (round.grading_access === 'open') throw new WorkflowError('Open rounds have no assignments to transfer.', 409)
     const assignment = await GraderAssignment.findOne({ _id: assignmentId, round_id: roundId }).session(tx).lean()
     if (!assignment) throw new WorkflowError('Assignment not found.', 404)
+    if (await mongoose.connection.collection('interviewbookings').findOne({ round_id: round._id, applicant_id: assignment.applicant_id, slot_id: { $ne: null } }, { session: tx })) throw new WorkflowError('Change this interviewer through availability or a conflict declaration in Interview schedule.', 409)
     const enrolled = await CandidateRound.findOne({ round_id: roundId, applicant_id: assignment.applicant_id }).session(tx).lean()
     if (!enrolled || !['pending', 'in_review'].includes(enrolled.state)) throw new WorkflowError('This applicant is not accepting reassignment.', 409)
     const generic = mongoose.connection.collection('genericreviews')
@@ -121,6 +127,7 @@ export async function reassignPending(roundId: string, assignmentId: string, tar
     if (assignment.grader_email === email) throw new WorkflowError('Choose a different grader.')
     if (assignment.submission_count || await generic.findOne({ round_id: round._id, applicant_id: assignment.applicant_id, grader_email: assignment.grader_email }, { session: tx })) throw new WorkflowError('Completed reviews cannot be reassigned.', 409)
     if (await GraderAssignment.exists({ round_id: roundId, applicant_id: assignment.applicant_id, grader_email: email }).session(tx) || await generic.findOne({ round_id: round._id, applicant_id: assignment.applicant_id, grader_email: email }, { session: tx })) throw new WorkflowError('The receiving grader already has an assignment or review for this applicant.', 409)
+    if (await ReviewConflict.exists({ round_id: roundId, applicant_id: assignment.applicant_id, grader_email: email }).session(tx)) throw new WorkflowError('This reviewer has a conflict for the applicant.', 409)
     const user = await AuthorizedUser.updateOne({ email }, { $inc: { assignment_write_count: 1 } }, { session: tx })
     if (user.modifiedCount !== 1) throw new WorkflowError('The receiving grader is no longer authorized.', 409)
     const updated = await GraderAssignment.findOneAndUpdate({ _id: assignmentId, round_id: roundId, submission_count: 0 }, { $set: { grader_email: email, assigned_at: new Date() } }, { returnDocument: 'after', session: tx }).lean()

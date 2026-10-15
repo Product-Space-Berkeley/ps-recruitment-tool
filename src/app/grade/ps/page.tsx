@@ -1,5 +1,6 @@
 'use client'
-import Link from 'next/link'
+import PeerReviews from '@/components/PeerReviews'
+import RecruitmentNav from '@/components/RecruitmentNav'
 import { useCallback, useEffect, useState } from 'react'
 import { Round } from '@/lib/types'
 import { AnyRubric, isV2 } from '@/lib/ps/rubricCompatibility'
@@ -15,7 +16,7 @@ type Saved = Evaluation & { max_points?: number | null; panel_emails?: string[];
 // Points reviews store total points with their maximum; older weighted reviews store a 0–3 score.
 function scoreText(e: { score: number; max_points?: number | null }) { return e.max_points != null ? `${e.score} / ${e.max_points} pts` : `${e.score.toFixed(2)} / 3` }
 type Rounds = { grader_email: string; rounds: (Round & { cycle_name: string })[]; closed_rounds?: string[] }
-type Candidate = { applicant_id: string; name: string; first_name: string; last_name: string; major: string; year: string; time_commitment: string; evaluations: number; required: number; status: 'needs_review' | 'in_progress' | 'reviewed'; can_grade: boolean; mine: Saved | null }
+type Candidate = { applicant_id: string; name: string; first_name: string; last_name: string; major: string; year: string; time_commitment: string; evaluations: number; required: number; status: 'needs_review' | 'in_progress' | 'reviewed'; can_grade: boolean; conflicted?: boolean; mine: Saved | null }
 type Roster = { grader_email: string; round: { id: string; name: string; grading_access: 'open' | 'assigned'; assignment_mode: string; reviews_required: number }; co_interviewers: string[]; rubric: AnyRubric | null; rubrics: AnyRubric[]; candidates: Candidate[] }
 type Tab = 'all' | 'needs' | 'mine'
 const STATUS = { needs_review: ['Needs review', 'bg-[var(--bg-raised)]'], in_progress: ['In progress', 'bg-amber-500/15 text-amber-300'], reviewed: ['Reviewed', 'bg-emerald-500/15 text-emerald-300'] } as const
@@ -36,13 +37,19 @@ export default function PSGradePage() {
   }, [roundId, loadRoster])
   // eslint-disable-next-line react-hooks/set-state-in-effect -- Starts an external API read; state updates run after its response.
   useEffect(() => { void loadRounds() }, []) // eslint-disable-line react-hooks/exhaustive-deps -- load once; later loads are explicit
+  async function conflict(candidate: Candidate) {
+    if (!roster || !confirm(`Declare a conflict for ${candidate.name}? You will no longer be able to review this applicant.`)) return
+    try {
+      const result = await requestJson<{ message: string }>(`/api/ps/rounds/${roster.round.id}/conflicts`, { applicant_id: candidate.applicant_id })
+      setNotice(result.message); await loadRoster(roster.round.id)
+    } catch (error) { setError((error as Error).message) }
+  }
   const q = query.trim().toLowerCase()
   const candidates = (roster?.candidates ?? []).filter(c => !q || c.name.toLowerCase().includes(q) || c.major.toLowerCase().includes(q))
   const shown = tab === 'mine' ? candidates.filter(c => c.mine) : tab === 'needs' ? candidates.filter(c => c.status !== 'reviewed').sort((a, b) => a.evaluations - b.evaluations || a.name.localeCompare(b.name)) : candidates
   const all = roster?.candidates ?? [], reviewed = all.filter(c => c.status === 'reviewed').length, todo = all.filter(c => c.can_grade && !c.mine && c.status !== 'reviewed').length
   const rubric = open && roster ? roster.rubrics.find(r => r.id === (open.mine?.rubric_version_id ?? roster.rubric?.id)) : undefined
-  return <main className="mx-auto w-full min-w-0 max-w-5xl p-5 space-y-5 text-[var(--text-primary)]">
-    <nav className="flex gap-4 text-sm"><Link href="/dashboard">Dashboard</Link></nav>
+  return <><RecruitmentNav /><main className="mx-auto w-full min-w-0 max-w-5xl p-5 space-y-5 text-[var(--text-primary)]">
     {loading && <p role="status">Loading…</p>}
     {error && !open && <p role="alert" className="rounded-lg border border-red-400 p-3">{error}</p>}
     {!loading && rounds && !rounds.rounds.length && <section className="rounded-xl border border-[var(--border)] p-6 space-y-2"><h1 className="text-xl font-semibold">Nothing to grade right now</h1>
@@ -67,7 +74,7 @@ export default function PSGradePage() {
             <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs whitespace-nowrap ${STATUS[c.status][1]}`}>{STATUS[c.status][0]}</span></td>
             <td className="p-3 tabular-nums">{c.evaluations} / {c.required}</td>
             <td className="p-3 text-xs">{c.mine ? <>Submitted{c.mine.panel_emails && c.mine.panel_emails.length > 1 ? ` with ${c.mine.panel_emails.filter(e => e !== roster.grader_email).join(', ')}` : ''}</> : '—'}</td>
-            <td className="p-3 text-right"><button className="rounded-lg border border-[var(--border)] px-3 py-1.5 whitespace-nowrap disabled:opacity-40" disabled={!c.can_grade || !roster.rubric} title={c.can_grade ? undefined : 'Not assigned to you'} onClick={() => { setOpen(c); setNotice(''); setError('') }}>{c.mine ? 'Update' : 'Review'}</button></td>
+            <td className="p-3 text-right"><button className="rounded-lg border border-[var(--border)] px-3 py-1.5 whitespace-nowrap disabled:opacity-40" disabled={!c.can_grade || !roster.rubric} title={c.can_grade ? undefined : 'Not assigned to you'} onClick={() => { setOpen(c); setNotice(''); setError('') }}>{c.mine ? 'Update' : 'Review'}</button>{c.can_grade && roster.round.assignment_mode !== 'pair' && <button className="block ml-auto mt-2 text-xs underline" onClick={() => void conflict(c)}>Declare conflict</button>}{c.conflicted && <span className="block text-xs">Conflict recorded</span>}{c.status === 'reviewed' && c.mine && <PeerReviews roundId={roster.round.id} applicantId={c.applicant_id} />}</td>
           </tr>)}</tbody></table></div>}
       </section>
       {!roster.rubric && <p role="status" className="text-sm">This round has no published rubric yet, so grading isn’t available.</p>}
@@ -77,7 +84,7 @@ export default function PSGradePage() {
       <ReviewForm key={`${open.applicant_id}:${rubric.id}:${open.mine?.revision ?? 0}`} assignment={{ id: open.applicant_id, round_id: roster.round.id, applicant_id: open.applicant_id }} applicant={{ id: open.applicant_id, first_name: open.first_name, last_name: open.last_name, major: open.major, year: open.year, time_commitment: open.time_commitment }} rubric={rubric} interviewer={roster.grader_email} prior={open.mine ?? undefined} coInterviewers={roster.round.grading_access === 'open' ? roster.co_interviewers : undefined} askConflict={roster.round.grading_access === 'open'}
         onComplete={async saved => { await loadRoster(roster.round.id); setOpen(null); if (saved?.score !== undefined) setNotice(`Saved your evaluation of ${open.name} · ${scoreText(saved)}`) }} />
     </>}
-  </main>
+  </main></>
 }
 function ReviewForm({ assignment, applicant, rubric, interviewer, prior, coInterviewers, askConflict = false, onComplete }: { assignment: Assignment; applicant: Applicant; rubric: AnyRubric; interviewer: string; prior?: Saved; coInterviewers?: string[]; askConflict?: boolean; onComplete: (saved?: { score: number; max_points?: number | null }) => Promise<void> }) {
   const [co, setCo] = useState(prior?.panel_emails?.find(e => e !== interviewer) ?? ''), [knows, setKnows] = useState(prior?.knows_candidate ?? false)
