@@ -1,6 +1,6 @@
 # Running recruitment
 
-> WIP checkpoint: Google sending currently fails its fake-provider regression test. Do not use real sending yet. See the [resume checklist](RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before rollout.
+> Phase 6 passes fake-provider regression tests. Real Google consent and an explicitly selected test email are still required before rollout. Other workflow acceptance work is tracked in the [resume checklist](RECRUITMENT_WORKFLOW_SPEC.md#resume-here).
 
 ## Cycle to final decisions
 

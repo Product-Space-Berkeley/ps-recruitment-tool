@@ -139,8 +139,8 @@ Each round uses its own scores for ranking. The candidate history shows all roun
 - [x] Permission and real-time update tests.
 
 ### Phase 6 — Google sending and exports
-- [ ] Google mailbox connection, recipient/template preview, explicit send and reliable outbox.
-- [ ] Final CSV, failure/retry tests, deployment/Google setup instructions.
+- [x] Google mailbox connection, recipient/template preview, explicit send and reliable outbox.
+- [x] Final CSV, failure/retry tests, deployment/Google setup instructions.
 
 ### Phase 7 — End-to-end release
 - [ ] Disposable full-cycle simulation, role/privacy/concurrency tests, responsive browser checks.
@@ -148,7 +148,7 @@ Each round uses its own scores for ranking. The candidate history shows all roun
 
 ## Current implementation caveats
 
-This checkpoint contains implementation through the email phase, but phases 3, 4, 6 and 7 still have acceptance work. Legacy rounds are preserved. Do not use the Gmail sender for real messages yet: the fake-provider HTTP suite currently fails when reading the encrypted refresh credential. No real mail was sent.
+Implementation through the email phase is present. Phase 6 now passes automated acceptance, including the fake-provider HTTP suite. Phases 3, 4 and 7 still have acceptance work. Legacy rounds are preserved. Real Google consent and a deliberately selected test email remain deployment acceptance tasks; no real mail was sent.
 
 ## Resume here
 
@@ -161,19 +161,19 @@ User requested an immediate checkpoint push on 2026-10-14, so feature work stopp
 | 3 — Scoring/deliberation | Implemented and core tests passed; standard rubric compatibility needs completion. |
 | 4 — Scheduling | Implemented; capacity collision, availability replacement, cutoff, link rotation and authorization tests passed. Broader cross-round/time-zone/end-to-end tests remain. |
 | 5 — Social cards | Implemented; membership, ownership, stale edit and moderation HTTP tests passed. Visual acceptance belongs to Phase 7. |
-| 6 — Google email/CSV | Work in progress. OAuth/preview checks passed, sending test fails at credential read. CSV implemented. |
+| 6 — Google email/CSV | Automated acceptance complete: connection/state, encrypted storage, privacy, preview, concurrent sending, duplicate protection, failures/uncertain results and disconnect passed. Real Google setup remains release acceptance. |
 | 7 — Release | Incomplete. Production build passes; full-cycle and browser acceptance remain. |
 
 Next work, in order:
-1. Fix `src/lib/ps/mail.ts`: `sendMail` gets `undefined` for `encrypted_refresh` despite `.sanitizeProjection(false).select('+encrypted_refresh')`. The database contains the encrypted value; inspect `src/lib/mongooseConfig.ts` and Mongoose projection behavior. Keep credentials server-only. Disconnect uses the same lookup and needs the same fix. Run `npm run test:ps:http`; its Google provider is fully faked.
+1. Completed: fixed the server-only credential lookup. Mongoose’s global projection policy took precedence over query overrides. Sending/revocation now use a fixed native collection projection without changing global safety settings. The full disposable HTTP suite passes, including absence of credentials from API responses.
 2. Finish the standard-round rubric policy: old written templates still have class-specific sections. New standard rounds must use the same rubric/max points for all years; preserve historical rounds. Enforce the policy on publication/settings. Normalization currently flags incompatible maximum points instead of manufacturing comparable scores.
 3. Exercise three complete rounds through the public API, including booking and independent PD/final reviews, normalization freeze, final social cards and host finalization. Add cross-round overlapping interviewer and daylight-saving tests.
 4. Review remaining scheduling integration edges: generic assignment generation is blocked once slots exist, but new standard interview rounds should direct admins to scheduling even before slots exist. Verify conflict replacement resolves all coverage alerts and preserves submitted evidence.
 5. Complete desktop/mobile browser acceptance. The browser tool was previously blocked by URL policy; no visual acceptance is claimed. Source-level interface detector passed.
-6. Validate Gmail rejected/uncertain retry paths after fixing credential access, then manually connect a test Google account and explicitly send a selected test message. Configure `MAIL_TOKEN_KEY` privately first; no env values were changed for this checkpoint.
+6. Automated Gmail rejection/uncertain-result checks now pass. Manually connect a test Google account and explicitly send a selected test message. Configure `MAIL_TOKEN_KEY` privately first; no env values were changed for this checkpoint.
 7. Review and format the new service modules for maintainability, rerun required checks, then mark remaining phase gates complete. No real database migrations have been run.
 
-Checkpoint verification: production build, TypeScript, lint, security tests and PS unit tests passed. Full HTTP regression passed all earlier phases plus scheduling/social tests, then failed in Phase 6 as described. No secrets should be committed; `.env.local` remains ignored.
+Verification: the checkpoint production build and PS unit tests passed. After the email fix, TypeScript, lint, security tests and the complete disposable HTTP regression suite passed. Real-provider and browser acceptance remain outstanding. `.env.local` remains ignored.
 
 ## Implementation log
 
@@ -184,3 +184,5 @@ Checkpoint verification: production build, TypeScript, lint, security tests and 
 - 2026-10-14: Phase 2 verified: typecheck, lint, security/unit tests and disposable HTTP suite passed. Phase 3 normalization and provisional host-only finalization implemented; finalization is idempotent, outcome changes cannot be made through the old enrollment endpoint. Finalized rounds cannot be reopened in this release. Phase 4 scheduling, Phase 5 social boards, and Phase 6 Google sending implemented; full late-phase verification is in progress. No live applicant data modified and no real email sent.
 
 - 2026-10-14: User requested immediate push and pause. Saved current implementation, exact phase status, failing mail test and ordered resume checklist. This is a WIP checkpoint, not phase-7 completion.
+
+- 2026-10-14: Resumed Phase 6. Corrected encrypted refresh credential access for sending/revocation using a fixed server-only native projection. Added response privacy assertions. Typecheck, lint, security tests and the full HTTP suite passed, including fake Google send/concurrency/idempotency/failure/disconnect tests. Phase 6 automated acceptance complete; no real email sent. Next: standard-rubric compatibility and remaining Phase 3/4/7 acceptance.

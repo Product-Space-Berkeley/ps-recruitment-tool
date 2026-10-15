@@ -1,6 +1,6 @@
 # Product Space @ Berkeley — Recruitment Tool
 
-> Current checkpoint is work in progress. Phases 1–2 and social-card checks pass; email sending has a known failing regression. See [phase status and resume steps](docs/RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before continuing or deploying.
+> Current checkpoint is work in progress. Phases 1–2, social-card checks and Phase 6 automated email tests pass; remaining workflow and real-provider acceptance are still pending. See [phase status and resume steps](docs/RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before continuing or deploying.
 
 A recruitment portal for collecting applications, assigning reviewers, grading, importing interview and coffee-chat notes, and running candidate deliberations.
 
@@ -14,26 +14,26 @@ server. Mongoose caches schemas, so a running server must be restarted.
 1. Use a development database with fake applicants. Open `/admin/rounds`, select
    a cycle, and create the standard Written Application, PD Interview, and Final
    rounds. Publish each rubric and choose eligible graders.
-2. Start grading. The standard rounds use open grading: interviewers choose the
-   candidate they met at `/grade/ps` and can credit a co-interviewer. Interviews
-   can be scored directly in the app; Google Forms/Sheets are not required for
-   this workflow. Existing CSV imports remain available for legacy rounds only.
-3. In the round's Reviews panel, close grading to freeze the scores. An explicit
+2. Written: preview and assign two independent reviewers per applicant. For
+   interviews, configure slots under **Interview schedule**, mark interviewer
+   availability, then invite applicants to book. Each interviewer submits their
+   own rubric at `/grade/ps`; peer reviews stay hidden until both are submitted.
+3. In Reviews & progression, close grading to freeze scores. An explicit
    override places incomplete candidates on hold with an incomplete snapshot.
-4. Use **Open live deliberation** to create or reopen the round's active room.
-   Its roster comes from ready/held candidates and frozen scores. Share the room
-   code with authorized members to use the existing notes and voting controls.
-5. The room creator or an admin saves decisions. **Accepted** in a non-final room
-   advances the candidate to the next round; in the final room it records final
-   acceptance. Hold and Reject do not advance anyone. The round panel provides
-   the more explicit **Advance** / **Accept** buttons and sorts by frozen score.
-6. Use **Export decisions CSV** for names, emails, current decisions, frozen
-   scores, and decision authors/timestamps. Votes do not automatically decide.
+4. Use **Open live deliberation**. Its roster comes from ready/held candidates
+   and frozen scores. Share the room code with authorized members.
+5. Only the host records provisional consensus. Resolve every yellow, then
+   click **Finish decisions**. Green advances to the next round or accepts in
+   the final round; red rejects. No email is sent automatically. Finalized
+   decisions cannot be reopened in this release.
+6. Use **Export decisions CSV** for names, emails, decisions, frozen scores,
+   normalized recommendations and decision authors/timestamps. Use **Email &
+   exports** to connect a Google mailbox, preview messages and explicitly send.
 
-Admins can reopen accepted/rejected decisions into Hold; advanced candidates
-cannot be reset because they already have history in the next round. Reopening
-grading ends the old live room; close grading again and open a new room to use
-updated snapshots. Earlier rooms, evaluations, and decision history are retained.
+Before finalization, admins can reopen grading; this ends the active room and
+preserves earlier snapshots. Close grading again to create a new frozen dataset.
+Historical shared-pair/open rounds retain their existing configuration. See
+[operations](docs/RECRUITMENT_OPERATIONS.md) for rollout and current limitations.
 
 Before a production deployment, run the index preflight and additive migration
 against the intended database (the name must match `MONGODB_URI`):

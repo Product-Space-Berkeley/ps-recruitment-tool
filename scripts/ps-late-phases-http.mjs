@@ -60,6 +60,9 @@ export async function latePhases({call,base,mongoose,emails}) {
  await call(`/api/ps/mail/callback?state=${state}&code=fake`,{status:409})
  const mailbox=await db.collection('mailboxes').findOne({owner:'lead@example.test'});assert.ok(mailbox.encrypted_refresh&&!mailbox.encrypted_refresh.includes('fake-refresh'))
  const mailurl=`/api/ps/mail?round_id=${round}`
+ const publicState=await call(mailurl)
+ assert.ok(!JSON.stringify(publicState).includes('encrypted_refresh'))
+ assert.ok(!JSON.stringify(publicState).includes('fake-refresh'))
  const preview={action:'preview',round_id:String(round),kind:'rejection',subject:'Decision for {{first_name}}',body:'Hi {{first_name}}, thank you for applying.'}
  assert.equal((await call('/api/ps/mail',{method:'POST',body:preview})).messages.length,0,'provisional colors do not create outcome emails')
  for(const c of candidates)await call(`/api/candidates/${c.id}`,{method:'PATCH',body:{status:'rejected'}})
