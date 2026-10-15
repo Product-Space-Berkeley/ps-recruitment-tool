@@ -129,6 +129,7 @@ export const EssayResponse = models.EssayResponse || model('EssayResponse', Essa
 
 // ─── Rounds ──────────────────────────────────────────────────
 const RoundSchema = new Schema({
+  standard_stage: { type: String, enum: ['written_app', 'pd_interview', 'final', null], default: null },
   workflow:           { type: String, enum: ['legacy', 'ps'], default: 'legacy' },
   evaluation_type:    { type: String, enum: ['rubric', 'interview', 'social_feedback', 'submission_rubric'], default: null },
   reviews_required:   { type: Number, default: 1, min: 1, max: 500 },

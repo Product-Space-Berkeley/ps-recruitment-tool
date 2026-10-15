@@ -138,9 +138,26 @@ export function finalRoundTemplate(): Structure {
   ])
 }
 
+// New recruitment uses one shared rubric across class years. Legacy template
+// builders remain available for existing rounds and historical fixtures.
+export function standardWrittenTemplate(): Structure {
+  const rubric = writtenAppTemplate()
+  rubric.name = 'Written application / resume — shared rubric'
+  rubric.categories = rubric.categories.filter(c => c.id !== 'resume_upper').map(c => {
+    const shared = { ...c, show_for_years: undefined }
+    if (c.id === 'resume_freshman') shared.name = 'Resume: commitment and contribution'
+    return shared
+  })
+  rubric.questions = rubric.questions.filter(q => q.category_id !== 'resume_upper').map(q => ({
+    ...q,
+    description: q.description.replace('\n\nNOTE: if they removed everything from high school give them a 2 and note that in the Notes section.', ''),
+  }))
+  return rubric
+}
+
 export const PS_STANDARD_ROUNDS = [
-  { key: 'written_app', name: 'Written App / Resume Screening', evaluation_type: 'rubric', assignment_mode: 'individual', template: writtenAppTemplate },
-  { key: 'pd_interview', name: 'PD Design Interview', evaluation_type: 'interview', assignment_mode: 'pair', template: pdInterviewTemplate },
-  { key: 'final', name: 'Final Round: Take-home + Social', evaluation_type: 'interview', assignment_mode: 'pair', template: finalRoundTemplate },
+  { key: 'written_app', name: 'Written App / Resume Screening', evaluation_type: 'rubric', assignment_mode: 'individual', template: standardWrittenTemplate },
+  { key: 'pd_interview', name: 'PD Design Interview', evaluation_type: 'interview', assignment_mode: 'individual', template: pdInterviewTemplate },
+  { key: 'final', name: 'Final Round: Take-home + Social', evaluation_type: 'interview', assignment_mode: 'individual', template: finalRoundTemplate },
 ] as const
 export const RUBRIC_TEMPLATES = PS_STANDARD_ROUNDS.map(r => ({ key: r.key, name: r.name, build: r.template }))

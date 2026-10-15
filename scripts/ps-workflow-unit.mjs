@@ -358,6 +358,14 @@ try {
   // Points scoring and the FA26 templates.
   const pts = await import(pathToFileURL(join(dir, 'points.mjs')))
   const tpl = await import(pathToFileURL(join(dir, 'templates.mjs')))
+  for (const standard of tpl.PS_STANDARD_ROUNDS) {
+    const shared = pts.validatePoints(standard.template(), true)
+    assert.equal(standard.assignment_mode, 'individual')
+    assert.ok(shared.categories.every(c => !c.show_for_years?.length))
+    assert.equal(pts.rubricRange(shared).differs_by_grade, false)
+  }
+  assert.ok(tpl.writtenAppTemplate().categories.some(c => c.show_for_years?.length), 'historical template remains unchanged')
+
   const expected = { written_app: { criteria: 17, bonus: 0, penalty: -2, max: 17 }, pd_interview: { criteria: 33, bonus: 8, penalty: -5, max: 41 }, final: { criteria: 52, bonus: 3, penalty: -3, max: 55 } }
   for (const round of tpl.PS_STANDARD_ROUNDS) {
     const s = pts.validatePoints(round.template(), true)

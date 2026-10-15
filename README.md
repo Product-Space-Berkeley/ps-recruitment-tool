@@ -1,6 +1,6 @@
 # Product Space @ Berkeley — Recruitment Tool
 
-> Current checkpoint is work in progress. Phases 1–2, social-card checks and Phase 6 automated email tests pass; remaining workflow and real-provider acceptance are still pending. See [phase status and resume steps](docs/RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before continuing or deploying.
+> Current checkpoint is work in progress. Phases 1–6 and the full three-round automated simulation pass. Desktop/mobile visual and real-Google acceptance remain before release. See [phase status and resume steps](docs/RECRUITMENT_WORKFLOW_SPEC.md#resume-here) before continuing or deploying.
 
 A recruitment portal for collecting applications, assigning reviewers, grading, importing interview and coffee-chat notes, and running candidate deliberations.
 

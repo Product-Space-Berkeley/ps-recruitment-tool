@@ -15,6 +15,7 @@ function units(round: { assignment_mode?: string; interviewer_pairs?: Interviewe
 const unitOf = (row: AssignmentRow, pairs: InterviewerPair[] | null) => pairs ? row.panel_id ?? `unpaired:${row.grader_email}` : row.grader_email
 async function snapshot(roundId: string, tx?: mongoose.ClientSession) {
   const round = await psRound(roundId, tx)
+  if (['pd_interview', 'final'].includes(round.standard_stage ?? '')) throw new WorkflowError('Interviewers are assigned through bookings. Open Interview schedule to configure slots and availability.', 409)
   if (await mongoose.connection.collection('interviewslots').findOne({ round_id: new mongoose.Types.ObjectId(roundId) }, { session: tx })) throw new WorkflowError('Interview assignments come from bookings. Use Interview schedule.', 409)
   if (round.archived || !['pending', 'grading'].includes(round.status)) throw new WorkflowError('Assignments require a pending or active grading round.', 409)
   if (round.grading_access === 'open') throw new WorkflowError('This round uses open grading, so there is nothing to assign. Use Start grading instead.', 409)

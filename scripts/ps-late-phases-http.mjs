@@ -27,6 +27,33 @@ export async function latePhases({call,base,mongoose,emails}) {
  await call(url,{method:'POST',role:'leadership',email:removed,body:{action:'availability',slot_id:slots[0].id,available:false}})
  const replaced=(await call(url)).bookings.find(x=>x.id===first.id)
  assert.equal(replaced.interviewers.length,2);assert.ok(!replaced.interviewers.includes(removed))
+ const cancelled=replaced.interviewers.find(email=>!first.interviewers.includes(email))
+ await call(url,{method:'POST',role:'leadership',email:cancelled,body:{action:'availability',slot_id:slots[0].id,available:false}})
+ await call(`/api/ps/rounds/${round}/conflicts`,{method:'POST',role:'leadership',email:cancelled,body:{applicant_id:first.applicant_id}})
+ assert.equal((await call(url)).bookings.find(x=>x.id===first.id).needs_replacement,true)
+ await call(url,{method:'POST',role:'leadership',email:removed,body:{action:'availability',slot_id:slots[0].id,available:true}})
+ await call(url,{method:'POST',body:{action:'replace',booking_id:first.id}})
+ assert.equal((await call(url)).bookings.find(x=>x.id===first.id).needs_replacement,false)
+ assert.equal(await db.collection('reviewconflicts').countDocuments({round_id:round,resolved:false}),0)
+ // A different round cannot book interviewers already occupied at this time.
+ const overlapping=oid(),other=oid()
+ await db.collection('rounds').insertOne({_id:overlapping,cycle_id:cycle,workflow:'ps',name:'Overlapping PD',status:'pending',archived:false,order_index:0,reviews_required:2,assignment_mode:'individual',grading_access:'assigned',eligible_grader_emails:emails,rubric_version_id:oid()})
+ await db.collection('applicants').insertOne({_id:other,cycle_id:cycle,first_name:'Other',last_name:'Slot',email:'other-slot@example.test'})
+ await db.collection('candidaterounds').insertOne({round_id:overlapping,cycle_id:cycle,applicant_id:other,state:'pending'})
+ const otherUrl=`/api/ps/rounds/${overlapping}/schedule`
+ await call(otherUrl,{method:'POST',body:{action:'create_slots',start,location:'Other room'}})
+ const otherSlot=(await call(otherUrl)).slots[0]
+ for(const email of emails)await call(otherUrl,{method:'POST',role:'leadership',email,body:{action:'availability',slot_id:otherSlot.id,available:true}})
+ const otherLink=await call(otherUrl,{method:'POST',body:{action:'invite',applicant_id:String(other)}})
+ assert.equal((await book(otherLink.token,otherSlot.id)).status,409)
+ assert.equal(await db.collection('graderassignments').countDocuments({round_id:overlapping}),0)
+ // Explicit offsets preserve the two distinct 1:30 AM slots on the fall-back day.
+ await call(otherUrl,{method:'POST',body:{action:'create_slots',start:'2030-11-03T01:30:00-07:00',duration:30,break_minutes:30,count:2,location:'DST fixture'}})
+ const dst=(await call(otherUrl)).slots.filter(s=>s.location==='DST fixture')
+ assert.equal(new Date(dst[1].start)-new Date(dst[0].start),3600000)
+ const clock=s=>new Date(s).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',timeZoneName:'short'})
+ assert.match(clock(dst[0].start),/1:30 AM PDT/);assert.match(clock(dst[1].start),/1:30 AM PST/)
+
  await db.collection('interviewslots').updateOne({_id:new mongoose.Types.ObjectId(slots[0].id)},{$set:{start:new Date(Date.now()+3600000)}})
  assert.equal((await book(links[winner],slots[1].id)).status,409)
  assert.equal((await book('bad',slots[1].id)).status,404)
@@ -89,4 +116,51 @@ export async function latePhases({call,base,mongoose,emails}) {
  await call('/api/ps/mail',{method:'POST',body:{action:'disconnect'}})
  assert.equal((await call(mailurl)).mailbox,null)
  console.log('Phase 6 mail: OAuth state/replay, encrypted storage, draft preview, finalized-only recipients, concurrency/idempotency, rejected/uncertain delivery and disconnect passed with a fake provider.')
+}
+
+export async function fullCycle({call,base,mongoose,emails}) {
+ const db=mongoose.connection,cycle=new mongoose.Types.ObjectId(),pool=emails.slice(0,2)
+ await db.collection('authorizedusers').updateMany({email:{$in:pool}},{$set:{role:'leadership'}})
+ await db.collection('recruitmentcycles').insertOne({_id:cycle,name:'Complete cycle acceptance',status:'active'})
+ const people=Array.from({length:6},(_,i)=>({_id:new mongoose.Types.ObjectId(),cycle_id:cycle,first_name:`Candidate ${i}`,last_name:'Full-cycle',email:`full${i}@example.test`,year:i%2?'Junior (Transfer)':'Junior'}))
+ await db.collection('applicants').insertMany(people)
+ const rounds=await call(`/api/ps/cycles/${cycle}/rounds`,{method:'POST',status:201,body:{template:'ps_standard',eligible_grader_emails:pool}})
+ let current=people.map(p=>String(p._id))
+ for(let stage=0;stage<rounds.length;stage++){
+  const round=rounds[stage],url=`/api/ps/rounds/${round.id}`
+  const structure={schema_version:2,scoring_policy:'points_v1',name:'Shared acceptance rubric',weighting:'unconfigured',categories:[{id:'skill',name:'Skill',weight_bps:null}],questions:[{id:'score',category_id:'skill',label:'Skill',description:'Evidence',purpose:'SCORED_CRITERION',format:'numeric_choice',required:true,confirmed:true,scale:null,options:Array.from({length:7},(_,value)=>({value,label:String(value)}))}]}
+  const draft=await call(url+'/rubric-drafts',{method:'POST',status:201,body:{structure}})
+  const rubric=await call(`/api/ps/rubric-drafts/${draft.id}/publish`,{method:'POST',status:201,body:{revision:0,configuration_version:round.configuration_version}})
+  if(stage===0){const preview=await call(url+'/assignments');await call(url+'/assignments',{method:'POST',body:{preview_token:preview.preview_token}})}
+  else{
+   await call(url+'/assignments',{status:409})
+   await call(url+'/schedule',{method:'POST',body:{action:'create_slots',start:new Date(Date.now()+(10+stage)*86400000).toISOString(),count:current.length,duration:45,break_minutes:15,capacity:1,cutoff_hours:24,location:'Campus'}})
+   const slots=(await call(url+'/schedule')).slots
+   for(const slot of slots)for(const email of pool)await call(url+'/schedule',{method:'POST',role:'leadership',email,body:{action:'availability',slot_id:slot.id,available:true}})
+   for(const [i,applicant_id] of current.entries()){
+    const {token}=await call(url+'/schedule',{method:'POST',body:{action:'invite',applicant_id}})
+    const booked=await fetch(base+'/api/booking',{method:'POST',headers:{'Content-Type':'application/json','x-booking-token':token,origin:base},body:JSON.stringify({slot_id:slots[i].id})})
+    assert.equal(booked.status,200,await booked.text())
+   }
+  }
+  for(const [i,applicant_id] of current.entries())for(const [j,email] of pool.entries()){
+   await call('/api/ps/reviews',{method:'POST',status:201,role:'leadership',email,body:{schema_version:2,round_id:round.id,applicant_id,rubric_version_id:rubric.id,revision:0,comments:`Independent ${j}`,responses:[{question_id:'score',format:'numeric_choice',value:i+j}]}})
+   if(j===0)assert.equal((await call(`/api/ps/reviews?round_id=${round.id}`)).filter(r=>r.applicant_id===applicant_id).length,0)
+  }
+  await call(url+'/close',{method:'POST',body:{}})
+  const scores=await call(url+'/scores');assert.equal(scores.frozen,true);assert.equal(scores.normalized.length,current.length);assert.ok(scores.normalized.every(r=>Number.isFinite(r.z)))
+  if(stage===0){assert.equal(scores.normalized.filter(r=>r.recommendation==='green').length,3);assert.equal(scores.normalized.filter(r=>r.recommendation==='red').length,3)}
+  else assert.ok(scores.normalized.every(r=>r.recommendation==='yellow'))
+  const room=await call(url+'/deliberation',{method:'POST',body:{}}),candidates=await call(`/api/sessions/${room.id}/candidates`)
+  const winners=stage===0?current.slice(3):current
+  for(const c of candidates)await call(`/api/candidates/${c.id}`,{method:'PATCH',body:{status:winners.includes(c.applicant_id)?'accepted':'rejected'}})
+  if(stage===2){const social=`/api/ps/sessions/${room.id}/social/${candidates[0].id}`;await call(social,{method:'POST',body:{color:'yellow',text:'Question for final discussion.'}});const after=await call(url+'/scores');assert.deepEqual(after.normalized,scores.normalized)}
+  await call(`/api/ps/sessions/${room.id}/finish`,{method:'POST',body:{}})
+  await call(`/api/ps/sessions/${room.id}/finish`,{method:'POST',body:{}})
+  const board=await call(url+'/deliberation');assert.equal(board.candidates.filter(c=>c.state===(stage===2?'accepted':'advanced')).length,winners.length)
+  current=winners
+ }
+ const profile=await call(`/api/ps/candidates/${current[0]}`)
+ assert.equal(profile.timeline.length,3);assert.ok(profile.timeline.every(s=>s.score.frozen&&s.score.complete));assert.equal(profile.timeline[2].state,'accepted')
+ console.log('Full three-round cycle passed: balanced written assignments, independent blind reviews, normalized snapshots, booking-assigned PD/final reviews, qualitative social cards, host progression and candidate history.')
 }

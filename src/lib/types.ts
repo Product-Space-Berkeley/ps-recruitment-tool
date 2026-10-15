@@ -120,6 +120,7 @@ export interface AuthorizedUser {
 }
 
 export interface Round {
+  standard_stage?: 'written_app' | 'pd_interview' | 'final' | null
   workflow?: 'legacy' | 'ps'
   evaluation_type?: 'rubric' | 'interview' | 'social_feedback' | 'submission_rubric' | null
   reviews_required?: number

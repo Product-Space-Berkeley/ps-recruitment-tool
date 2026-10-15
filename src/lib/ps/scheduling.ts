@@ -13,7 +13,7 @@ bookingSchema.index({round_id:1,applicant_id:1},{unique:true});bookingSchema.ind
 export const InterviewBooking=models.InterviewBooking||model('InterviewBooking',bookingSchema)
 const hash=(token:string)=>createHash('sha256').update(token).digest('hex')
 function number(value:unknown,min:number,max:number,fallback:number){const n=value===undefined?fallback:Number(value);if(!Number.isInteger(n)||n<min||n>max)throw new WorkflowError(`Enter a whole number between ${min} and ${max}.`);return n}
-async function schedulingRound(id:string,tx:mongoose.ClientSession){const r=await lockRound(id,tx);if(!['pending','grading'].includes(r.status)||r.assignment_mode==='pair'||r.reviews_required!==2)throw new WorkflowError('Scheduling needs an open round with two independent reviews.',409);return r}
+async function schedulingRound(id:string,tx:mongoose.ClientSession){const r=await lockRound(id,tx);if(r.standard_stage==='written_app')throw new WorkflowError('Written reviewers use Assign reviewers, not interview booking.',409);if(!['pending','grading'].includes(r.status)||r.assignment_mode==='pair'||r.reviews_required!==2)throw new WorkflowError('Scheduling needs an open round with two independent reviews.',409);return r}
 export async function scheduleData(id:string,email:string,role:string){await psRound(id);const slots=await InterviewSlot.find({round_id:id}).sort({start:1}).lean();const bookings=await InterviewBooking.find({round_id:id}).lean();const people=await Applicant.find({_id:mongoose.trusted({$in:bookings.map(b=>b.applicant_id)})}).select('first_name last_name').lean();return {slots:slots.map(serialize),bookings:bookings.filter(b=>role==='admin'||role==='leadership'||b.interviewers.includes(email)).map(b=>({...serialize(b),name:people.find(p=>String(p._id)===String(b.applicant_id))?.first_name+' '+(people.find(p=>String(p._id)===String(b.applicant_id))?.last_name??'')}))}}
 export async function scheduleAction(id:string,body:Record<string,unknown>,actor:{email:string;role:string}){
   objectId(id);await Promise.all([InterviewSlot.init(),InterviewBooking.init()]);let result:Record<string,unknown>={ok:true}
@@ -63,6 +63,7 @@ export async function allocate(bid:string,round:{_id:unknown;eligible_grader_ema
  const candidates=allowed.map(a=>a.email).filter(e=>current?.available_emails.includes(e)&&!booking.interviewers.includes(e)&&!busy.some(b=>b.interviewers.includes(e))&&!conflicts.some(c=>c.grader_email===e)).sort((a,b)=>load(a)-load(b)||a.localeCompare(b))
  const selected=[...booking.interviewers,...candidates.slice(0,2-booking.interviewers.length)]
  await InterviewBooking.updateOne({_id:bid},{$set:{interviewers:selected,needs_replacement:selected.length<2}},{session:tx})
+ if(selected.length===2)await ReviewConflict.updateMany({round_id:round._id,applicant_id:booking.applicant_id,resolved:false,reason:'no_replacement'},{$set:{resolved:true,reason:'reassigned'}},{session:tx})
  for(const email of selected)await GraderAssignment.updateOne({round_id:round._id,applicant_id:booking.applicant_id,grader_email:email},{$setOnInsert:{assigned_at:new Date()}},{upsert:true,session:tx})
  return selected.length===2
 }

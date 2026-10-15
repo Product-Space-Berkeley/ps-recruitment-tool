@@ -4,7 +4,7 @@ import { requestJson } from '@/lib/ps/client'
 const input='rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2 w-full'
 const button='rounded-lg border border-[var(--border)] px-3 py-2 disabled:opacity-50'
 type Data={slots:{id:string;start:string;end:string;location:string;capacity:number;available_emails:string[]}[];bookings:{id:string;name:string;slot_id:string|null;interviewers:string[];needs_replacement:boolean}[]}
-const time=(s:string)=>new Date(s).toLocaleString('en-US',{timeZone:'America/Los_Angeles',dateStyle:'medium',timeStyle:'short'})
+const time=(s:string)=>new Date(s).toLocaleString('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})
 export default function PSScheduling({roundId}:{roundId:string}){
  const [data,setData]=useState<Data>({slots:[],bookings:[]}),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[link,setLink]=useState(''),[people,setPeople]=useState<{applicant_id:string;name:string}[]>([])
  const endpoint=`/api/ps/rounds/${roundId}/schedule`

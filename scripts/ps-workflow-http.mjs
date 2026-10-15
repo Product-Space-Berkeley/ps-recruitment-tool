@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { latePhases } from './ps-late-phases-http.mjs'
+import { latePhases, fullCycle } from './ps-late-phases-http.mjs'
 import { cp, mkdtemp, rm, symlink, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -85,6 +85,18 @@ async function fakeGoogleFetch(url: string, options?: RequestInit): Promise<Resp
   const standard = await call(`/api/ps/cycles/${standardCycle}/rounds`, { method: 'POST', status: 201, body: { template: 'ps_standard', eligible_grader_emails: emails, reviews_required: 2 } })
   assert.deepEqual(standard.map(r => r.name), ['Written App / Resume Screening', 'PD Design Interview', 'Final Round: Take-home + Social'])
   assert.ok(standard.every(r => r.reviews_required === 2 && r.assignment_mode === 'individual' && r.grading_access === 'assigned'));
+  assert.deepEqual(standard.map(r => r.standard_stage), ['written_app', 'pd_interview', 'final'])
+  for (const r of standard) {
+    await call(`/api/ps/rounds/${r.id}`, { method:'PATCH', body:{configuration_version:r.configuration_version,reviews_required:1},status:409 })
+    await call(`/api/ps/rounds/${r.id}`, { method:'PATCH', body:{configuration_version:r.configuration_version,grading_access:'open'},status:409 })
+  }
+  await call(`/api/ps/rounds/${standard[1].id}/assignments`, {status:409})
+  await call(`/api/ps/rounds/${standard[0].id}/schedule`, {method:'POST',body:{action:'create_slots'},status:409})
+  const writtenDraft = (await call(`/api/ps/rounds/${standard[0].id}/rubric-drafts`))[0]
+  assert.ok(writtenDraft.categories.every(c => !c.show_for_years?.length))
+  const restricted = { ...writtenDraft, categories: writtenDraft.categories.map((c,i)=>i===0?{...c,show_for_years:['Freshman']}:c) }
+  const restrictedDraft = await call(`/api/ps/rounds/${standard[0].id}/rubric-drafts`, {method:'POST',status:201,body:{structure:restricted}})
+  await call(`/api/ps/rubric-drafts/${restrictedDraft.id}/publish`, {method:'POST',body:{revision:0,configuration_version:standard[0].configuration_version},status:409})
   await mongoose.connection.collection('authorizedusers').updateMany({ email: { $in: emails } }, { $set: { role: 'grader' } });
   const standardDrafts = await call(`/api/ps/rounds/${standard[1].id}/rubric-drafts`)
   assert.equal(standardDrafts.length, 1); assert.equal(standardDrafts[0].scoring_policy, 'points_v1')
@@ -512,6 +524,7 @@ async function fakeGoogleFetch(url: string, options?: RequestInit): Promise<Resp
     await runLegacy('loadtest.mjs', [], { ALLOW_DESTRUCTIVE_TESTS: '1', LOAD_TEST_BASE_URL: base, LOAD_TEST_USERS: '5', LOAD_TEST_ACTIONS_PER_USER: '20', LOAD_TEST_CANDIDATES: '5', LOAD_TEST_REQUEST_TIMEOUT_MS: '60000' })
   }
   await latePhases({ call, base, mongoose, emails })
+  await fullCycle({ call, base, mongoose, emails })
   if (process.argv.includes('--browser')) {
     const browserCycle = new mongoose.Types.ObjectId()
     await mongoose.connection.collection('recruitmentcycles').insertOne({ _id: browserCycle, name: 'V2 browser QA', status: 'active', configuration_version: 0, lifecycle_write_count: 0 })

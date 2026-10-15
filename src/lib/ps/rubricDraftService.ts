@@ -78,6 +78,7 @@ export async function publishDraft(id: string, body: Record<string, unknown>, ac
     const graded = await GenericReview.exists({ round_id: roundId }).session(tx) || await Review.exists({ round_id: roundId }).session(tx) || await PSEvaluationContribution.exists({ round_id: roundId }).session(tx)
     if (graded && !isWeighted(draft) && !isPoints(draft)) throw new WorkflowError('Submitted reviews freeze the round rubric. Copy into a future round.', 409)
     const config = validateDraft(draft, true)
+    if (round.standard_stage && (!isPoints(config) || config.categories.some(c => c.show_for_years?.length))) throw new WorkflowError('Standard recruitment needs a points rubric shared by every class year. Remove class-year section restrictions before publishing.', 409)
     if (graded && isPoints(config)) {
       const active = round.rubric_version_id ? await RubricVersion.findById(round.rubric_version_id).session(tx).lean() : null
       const changes = active && isPoints(active) ? scoringChanges(active as unknown as Structure, config) : ['the scoring format']
